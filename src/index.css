@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ds-bg: #0f0f23;
+  --color-ds-card: #1a1a3e;
+  --color-ds-card-hover: #22224a;
+  --color-ds-border: #2a2a52;
+  --color-ds-accent: #6366f1;
+  --color-ds-accent-light: #8b5cf6;
+  --color-ds-text: #e2e8f0;
+  --color-ds-text-dim: #94a3b8;
+  --color-ds-text-muted: #64748b;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ds-bg);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Custom scrollbar for thumbnail strips */
+.thumb-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.thumb-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thumb-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-ds-border);
+  border-radius: 3px;
+}

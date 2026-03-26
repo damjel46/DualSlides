@@ -1,0 +1,69 @@
+{
+  "app": {
+    "name": "DualSlide",
+    "settings": "설정",
+    "quit": "종료"
+  },
+  "monitor": {
+    "primary": "주 모니터",
+    "folder": "폴더 선택",
+    "files": "이미지 선택",
+    "folder_images": "{{count}}개 이미지",
+    "interval": "간격",
+    "mode": "모드",
+    "preview": "미리보기",
+    "preview_collapse": "접기",
+    "select_all": "전체 선택",
+    "deselect_all": "전체 해제",
+    "not_configured": "미설정",
+    "auto_refresh": "자동 갱신",
+    "select_monitor": "위에서 모니터를 선택하세요"
+  },
+  "slideshow": {
+    "sequential": "순차 재생",
+    "shuffle": "랜덤 재생",
+    "play": "재생",
+    "pause": "일시정지",
+    "next": "다음",
+    "prev": "이전",
+    "running": "재생 중",
+    "stopped": "정지",
+    "pause_all": "전체 일시정지",
+    "resume_all": "전체 재개",
+    "start_all": "전체 시작",
+    "sync_timers": "타이머 동기화"
+  },
+  "settings": {
+    "autostart": "부팅 시 자동 실행",
+    "close_to_tray": "닫을 때 트레이로 최소화",
+    "language": "언어",
+    "hotkeys": "단축키",
+    "general": "일반",
+    "pro_features": "Pro 기능"
+  },
+  "interval": {
+    "10s": "10초",
+    "30s": "30초",
+    "1m": "1분",
+    "5m": "5분",
+    "10m": "10분",
+    "30m": "30분",
+    "1h": "1시간",
+    "custom": "직접입력",
+    "seconds": "초 (최대 86400)"
+  },
+  "pro": {
+    "upgrade": "Pro로 업그레이드",
+    "feature_locked": "이 기능은 DualSlide Pro가 필요합니다",
+    "profiles": "모니터 프로필",
+    "profiles_desc": "모니터 설정 저장 및 불러오기",
+    "window_mover": "창 이동",
+    "window_mover_desc": "모니터 간 창 이동",
+    "custom_hotkeys": "커스텀 핫키 설정",
+    "enter_key": "라이선스 키 입력",
+    "invalid_key": "유효하지 않은 라이선스 키",
+    "activated": "Pro 활성화 완료!",
+    "later": "나중에",
+    "activate": "활성화"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "app": {
+    "name": "DualSlide",
+    "settings": "Settings",
+    "quit": "Quit"
+  },
+  "monitor": {
+    "primary": "Primary",
+    "folder": "Select Folder",
+    "files": "Select Images",
+    "folder_images": "{{count}} images",
+    "interval": "Interval",
+    "mode": "Mode",
+    "preview": "Preview",
+    "preview_collapse": "Collapse",
+    "select_all": "Select all",
+    "deselect_all": "Deselect all",
+    "not_configured": "Not configured",
+    "auto_refresh": "Auto refresh",
+    "select_monitor": "Select a monitor above to configure"
+  },
+  "slideshow": {
+    "sequential": "Sequential",
+    "shuffle": "Shuffle",
+    "play": "Play",
+    "pause": "Pause",
+    "next": "Next",
+    "prev": "Previous",
+    "running": "Running",
+    "stopped": "Stopped",
+    "pause_all": "Pause All",
+    "resume_all": "Resume All",
+    "start_all": "Start All",
+    "sync_timers": "Sync timers"
+  },
+  "settings": {
+    "autostart": "Start on boot",
+    "close_to_tray": "Minimize to tray on close",
+    "language": "Language",
+    "hotkeys": "Hotkeys",
+    "general": "General",
+    "pro_features": "Pro Features"
+  },
+  "interval": {
+    "10s": "10 sec",
+    "30s": "30 sec",
+    "1m": "1 min",
+    "5m": "5 min",
+    "10m": "10 min",
+    "30m": "30 min",
+    "1h": "1 hour",
+    "custom": "Custom",
+    "seconds": "sec (max 86400)"
+  },
+  "pro": {
+    "upgrade": "Upgrade to Pro",
+    "feature_locked": "This feature requires DualSlide Pro",
+    "profiles": "Monitor Profiles",
+    "profiles_desc": "Save and load monitor configurations",
+    "window_mover": "Window Mover",
+    "window_mover_desc": "Move windows between monitors",
+    "custom_hotkeys": "Custom hotkey bindings",
+    "enter_key": "Enter license key",
+    "invalid_key": "Invalid license key",
+    "activated": "Pro activated!",
+    "later": "Later",
+    "activate": "Activate"
+  }
+}

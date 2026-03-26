@@ -1,0 +1,128 @@
+use crate::monitor::{self, ImageInfo, MonitorInfo};
+use crate::slideshow::{SlideshowEngine, SlideshowMode, SlideshowStatus};
+use crate::tray;
+use std::collections::HashMap;
+use tauri::State;
+
+// ── Monitor & Wallpaper ──────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_monitors(app: tauri::AppHandle) -> Vec<MonitorInfo> {
+    monitor::get_all_monitors(&app)
+}
+
+#[tauri::command]
+pub fn set_wallpaper(monitor_id: String, image_path: String) -> Result<(), String> {
+    monitor::set_wallpaper(&monitor_id, &image_path)
+}
+
+#[tauri::command]
+pub fn get_images_from_folder(folder_path: String) -> Result<Vec<ImageInfo>, String> {
+    monitor::get_images_from_folder(&folder_path)
+}
+
+// ── Slideshow ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn start_slideshow(
+    engine: State<'_, SlideshowEngine>,
+    monitor_id: String,
+    folder_path: String,
+    interval_secs: u64,
+    mode: SlideshowMode,
+) -> Result<(), String> {
+    engine.start_slideshow(monitor_id, folder_path, interval_secs, mode)
+}
+
+#[tauri::command]
+pub fn start_slideshow_files(
+    engine: State<'_, SlideshowEngine>,
+    monitor_id: String,
+    image_paths: Vec<String>,
+    interval_secs: u64,
+    mode: SlideshowMode,
+) -> Result<(), String> {
+    engine.start_slideshow_files(monitor_id, image_paths, interval_secs, mode)
+}
+
+#[tauri::command]
+pub fn start_synced(
+    engine: State<'_, SlideshowEngine>,
+    monitors_data: Vec<(String, Vec<String>)>,
+    interval_secs: u64,
+    mode: SlideshowMode,
+) -> Result<(), String> {
+    engine.start_synced(monitors_data, interval_secs, mode)
+}
+
+#[tauri::command]
+pub fn stop_slideshow(engine: State<'_, SlideshowEngine>, monitor_id: String) {
+    engine.stop_slideshow(&monitor_id);
+}
+
+#[tauri::command]
+pub fn next_wallpaper(
+    engine: State<'_, SlideshowEngine>,
+    monitor_id: String,
+) -> Result<(), String> {
+    engine.next_wallpaper(&monitor_id)
+}
+
+#[tauri::command]
+pub fn prev_wallpaper(
+    engine: State<'_, SlideshowEngine>,
+    monitor_id: String,
+) -> Result<(), String> {
+    engine.prev_wallpaper(&monitor_id)
+}
+
+#[tauri::command]
+pub fn pause_all(engine: State<'_, SlideshowEngine>) {
+    engine.pause_all();
+}
+
+#[tauri::command]
+pub fn resume_all(engine: State<'_, SlideshowEngine>) -> Result<(), String> {
+    engine.resume_all()
+}
+
+#[tauri::command]
+pub fn get_slideshow_status(
+    engine: State<'_, SlideshowEngine>,
+) -> HashMap<String, SlideshowStatus> {
+    engine.get_status()
+}
+
+#[tauri::command]
+pub fn get_monitor_slideshow_status(
+    engine: State<'_, SlideshowEngine>,
+    monitor_id: String,
+) -> Option<SlideshowStatus> {
+    engine.get_monitor_status(&monitor_id)
+}
+
+#[tauri::command]
+pub fn sync_restart_all(engine: State<'_, SlideshowEngine>) -> Result<(), String> {
+    engine.sync_restart_all()
+}
+
+// ── Window mover (Pro) ───────────────────────────────────────────────
+
+#[tauri::command]
+pub fn move_window_to_next_monitor() -> Result<(), String> {
+    crate::window_mover::move_focused_to_next_monitor()
+}
+
+// ── Tray ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn update_tray_locale(
+    app: tauri::AppHandle,
+    locale_state: State<'_, tray::LocaleState>,
+    locale: String,
+) -> Result<(), String> {
+    // Persist to shared state
+    *locale_state.lock().unwrap() = locale.clone();
+    // Rebuild tray with new locale
+    tray::build_tray(&app, &locale).map_err(|e| format!("Failed to update tray: {}", e))
+}
