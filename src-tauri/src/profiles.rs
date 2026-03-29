@@ -1,5 +1,5 @@
-/// Pro feature: Monitor profiles for saving/loading configurations.
-/// This module is a placeholder for the Pro version.
+/// Monitor profiles for saving/loading configurations.
+/// TODO: Implement profile persistence.
 
 use crate::slideshow::SlideshowMode;
 use serde::{Deserialize, Serialize};
@@ -18,17 +18,17 @@ pub struct MonitorProfile {
     pub monitors: HashMap<String, ProfileEntry>,
 }
 
-/// Save a profile. Pro-only feature placeholder.
+/// Save a profile. TODO: implement.
 pub fn save_profile(_profile: MonitorProfile) -> Result<(), String> {
-    Err("This feature requires DualSlide Pro".to_string())
+    Err("Profile saving not yet implemented".to_string())
 }
 
-/// Load a profile. Pro-only feature placeholder.
+/// Load a profile. TODO: implement.
 pub fn load_profile(_name: &str) -> Result<MonitorProfile, String> {
-    Err("This feature requires DualSlide Pro".to_string())
+    Err("Profile loading not yet implemented".to_string())
 }
 
-/// List all saved profiles. Pro-only feature placeholder.
+/// List all saved profiles. TODO: implement.
 pub fn list_profiles() -> Result<Vec<String>, String> {
-    Err("This feature requires DualSlide Pro".to_string())
+    Err("Profile listing not yet implemented".to_string())
 }

@@ -38,8 +38,7 @@
     "close_to_tray": "Minimize to tray on close",
     "language": "Language",
     "hotkeys": "Hotkeys",
-    "general": "General",
-    "pro_features": "Pro Features"
+    "general": "General"
   },
   "interval": {
     "10s": "10 sec",
@@ -51,19 +50,5 @@
     "1h": "1 hour",
     "custom": "Custom",
     "seconds": "sec (max 86400)"
-  },
-  "pro": {
-    "upgrade": "Upgrade to Pro",
-    "feature_locked": "This feature requires DualSlide Pro",
-    "profiles": "Monitor Profiles",
-    "profiles_desc": "Save and load monitor configurations",
-    "window_mover": "Window Mover",
-    "window_mover_desc": "Move windows between monitors",
-    "custom_hotkeys": "Custom hotkey bindings",
-    "enter_key": "Enter license key",
-    "invalid_key": "Invalid license key",
-    "activated": "Pro activated!",
-    "later": "Later",
-    "activate": "Activate"
   }
 }

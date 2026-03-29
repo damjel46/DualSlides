@@ -106,13 +106,6 @@ pub fn sync_restart_all(engine: State<'_, SlideshowEngine>) -> Result<(), String
     engine.sync_restart_all()
 }
 
-// ── Window mover (Pro) ───────────────────────────────────────────────
-
-#[tauri::command]
-pub fn move_window_to_next_monitor() -> Result<(), String> {
-    crate::window_mover::move_focused_to_next_monitor()
-}
-
 // ── Tray ─────────────────────────────────────────────────────────────
 
 #[tauri::command]

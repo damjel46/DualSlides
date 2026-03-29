@@ -38,8 +38,7 @@
     "close_to_tray": "닫을 때 트레이로 최소화",
     "language": "언어",
     "hotkeys": "단축키",
-    "general": "일반",
-    "pro_features": "Pro 기능"
+    "general": "일반"
   },
   "interval": {
     "10s": "10초",
@@ -51,19 +50,5 @@
     "1h": "1시간",
     "custom": "직접입력",
     "seconds": "초 (최대 86400)"
-  },
-  "pro": {
-    "upgrade": "Pro로 업그레이드",
-    "feature_locked": "이 기능은 DualSlide Pro가 필요합니다",
-    "profiles": "모니터 프로필",
-    "profiles_desc": "모니터 설정 저장 및 불러오기",
-    "window_mover": "창 이동",
-    "window_mover_desc": "모니터 간 창 이동",
-    "custom_hotkeys": "커스텀 핫키 설정",
-    "enter_key": "라이선스 키 입력",
-    "invalid_key": "유효하지 않은 라이선스 키",
-    "activated": "Pro 활성화 완료!",
-    "later": "나중에",
-    "activate": "활성화"
   }
 }

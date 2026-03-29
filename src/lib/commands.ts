@@ -122,12 +122,6 @@ export async function syncRestartAll(): Promise<void> {
   return invoke("sync_restart_all");
 }
 
-// ── Window mover (Pro) ───────────────────────────────────────────────
-
-export async function moveWindowToNextMonitor(): Promise<void> {
-  return invoke("move_window_to_next_monitor");
-}
-
 // ── Tray ─────────────────────────────────────────────────────────────
 
 export async function updateTrayLocale(locale: string): Promise<void> {

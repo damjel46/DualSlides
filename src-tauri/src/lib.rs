@@ -4,7 +4,6 @@ mod monitor;
 mod profiles;
 mod slideshow;
 mod tray;
-mod window_mover;
 
 use slideshow::SlideshowEngine;
 use tauri::Manager;
@@ -74,7 +73,6 @@ pub fn run() {
             commands::get_slideshow_status,
             commands::get_monitor_slideshow_status,
             commands::sync_restart_all,
-            commands::move_window_to_next_monitor,
             commands::update_tray_locale,
         ])
         // ── Window close → hide to tray ──────────────────────────

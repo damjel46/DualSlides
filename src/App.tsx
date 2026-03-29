@@ -8,8 +8,7 @@ import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncIntervalFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
-import { usePro } from "./hooks/usePro";
-import { startSynced, getImagesFromFolder, moveWindowToNextMonitor } from "./lib/commands";
+import { startSynced, getImagesFromFolder } from "./lib/commands";
 
 function App() {
   const { t } = useTranslation();
@@ -20,7 +19,6 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
   const { syncEnabled, setSync } = useAppConfig();
-  const { isPro, activate: activatePro } = usePro();
   const [hasStoredConfigs, setHasStoredConfigs] = useState(false);
 
   // Check if there are saved configs in store (for "Start All" on fresh launch)
@@ -168,28 +166,36 @@ function App() {
             handleStartAll();
           }
           break;
-        case "move_window":
-          moveWindowToNextMonitor().catch((e) =>
-            console.error("Move window failed:", e),
-          );
-          break;
       }
     },
     [selectedMonitorId, statuses, next, prev, stop],
   );
 
-  const { hotkeys, updateHotkey } = useHotkeys(handleHotkeyAction, isPro);
+  const { hotkeys, updateHotkey } = useHotkeys(handleHotkeyAction);
 
   const selectedMon =
     selectedMonitor !== null ? monitors[selectedMonitor] : null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-ds-bg text-ds-text">
+    <div className="relative flex min-h-screen flex-col bg-ds-bg text-ds-text overflow-hidden">
+      {/* Ambient background orbs */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-600/8 blur-[120px]" />
+        <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-purple-600/8 blur-[120px]" />
+        <div className="absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500/5 blur-[100px]" />
+      </div>
+
+      {/* Grain noise overlay */}
+      <div className="pointer-events-none fixed inset-0 z-[9999] opacity-[0.025]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat' }} />
+
       {/* Header */}
-      <header className="flex shrink-0 items-center justify-between border-b border-ds-border px-5 py-3">
+      <header className="relative z-10 shrink-0 bg-[#0f0f23]/80 backdrop-blur-xl border-b border-white/5">
+        {/* Top gradient accent line */}
+        <div className="h-px bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
+        <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-2.5">
           {/* Logo */}
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-ds-accent to-ds-accent-light">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-ds-accent to-ds-accent-light shadow-lg shadow-indigo-500/20">
             <svg
               className="h-4 w-4 text-white"
               fill="currentColor"
@@ -198,17 +204,17 @@ function App() {
               <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
             </svg>
           </div>
-          <h1 className="text-base font-bold">{t("app.name")}</h1>
+          <h1 className="bg-gradient-to-r from-white via-indigo-300 to-purple-400 bg-clip-text text-base font-bold text-transparent">{t("app.name")}</h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/5 px-1 py-1">
           {/* Pause All / Resume All */}
           {anyRunning && (
             <motion.button
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               onClick={pause}
-              className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
+              className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -227,7 +233,7 @@ function App() {
           {!anyRunning && !anyStopped && hasStoredConfigs && (
             <button
               onClick={handleStartAll}
-              className="flex items-center gap-1.5 rounded-lg border border-ds-accent/30 bg-ds-accent/10 px-3 py-1.5 text-xs font-medium text-ds-accent-light transition hover:bg-ds-accent/20"
+              className="flex items-center gap-1.5 rounded-full border border-ds-accent/30 bg-ds-accent/10 px-3 py-1.5 text-xs font-medium text-ds-accent-light transition hover:bg-ds-accent/20"
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -248,7 +254,7 @@ function App() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               onClick={handleStartAll}
-              className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 transition hover:bg-emerald-500/20"
+              className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 transition hover:bg-emerald-500/20"
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -268,7 +274,7 @@ function App() {
           {/* Settings gear */}
           <button
             onClick={() => setSettingsOpen(true)}
-            className="rounded-lg p-2 text-ds-text-muted transition hover:bg-ds-card hover:text-ds-text"
+            className="rounded-full p-2 text-ds-text-muted transition hover:bg-white/10 hover:text-ds-text"
             title={t("app.settings")}
           >
             <svg
@@ -292,11 +298,12 @@ function App() {
             </svg>
           </button>
         </div>
+        </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto p-5">
-        <div className="mx-auto max-w-4xl">
+      <main className="relative z-10 flex-1 overflow-y-auto px-6 py-5">
+        <div className="mx-auto max-w-4xl space-y-5">
           {/* Loading */}
           {loading && (
             <div className="flex items-center justify-center py-20">
@@ -347,8 +354,6 @@ function App() {
         onClose={() => setSettingsOpen(false)}
         hotkeys={hotkeys}
         onUpdateHotkey={updateHotkey}
-        isPro={isPro}
-        onActivatePro={activatePro}
       />
     </div>
   );

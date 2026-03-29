@@ -5,14 +5,12 @@ import { load } from "@tauri-apps/plugin-store";
 export interface HotkeyBinding {
   action: string;
   shortcut: string;
-  proOnly?: boolean;
 }
 
 const DEFAULT_HOTKEYS: HotkeyBinding[] = [
   { action: "next_wallpaper", shortcut: "Ctrl+Alt+Right" },
   { action: "prev_wallpaper", shortcut: "Ctrl+Alt+Left" },
   { action: "toggle_slideshow", shortcut: "Ctrl+Alt+P" },
-  { action: "move_window", shortcut: "Ctrl+Alt+M", proOnly: true },
 ];
 
 const STORE_FILE = "hotkeys.json";
@@ -27,7 +25,6 @@ function getStore() {
 
 export function useHotkeys(
   onAction: (action: string) => void,
-  isPro: boolean = false,
 ) {
   const [hotkeys, setHotkeys] = useState<HotkeyBinding[]>(DEFAULT_HOTKEYS);
   const [loaded, setLoaded] = useState(false);
@@ -60,8 +57,6 @@ export function useHotkeys(
 
     const registerAll = async () => {
       for (const binding of hotkeys) {
-        // Skip pro-only hotkeys if not pro
-        if (binding.proOnly && !isPro) continue;
         try {
           await register(binding.shortcut, (event) => {
             if (event.state === "Pressed") {
@@ -82,7 +77,7 @@ export function useHotkeys(
         unregister(shortcut).catch(() => {});
       }
     };
-  }, [hotkeys, loaded, isPro]);
+  }, [hotkeys, loaded]);
 
   // Save + re-register on update
   const updateHotkey = useCallback(
