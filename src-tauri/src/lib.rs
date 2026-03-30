@@ -5,6 +5,7 @@ mod profiles;
 mod slideshow;
 mod taskbar;
 mod tray;
+mod zen_mode;
 
 use slideshow::SlideshowEngine;
 use tauri::Manager;
@@ -77,6 +78,8 @@ pub fn run() {
             commands::update_tray_locale,
             commands::set_taskbar_visible,
             commands::get_taskbar_visible,
+            commands::toggle_zen_mode,
+            commands::is_zen_mode_active,
         ])
         // ── Window close → hide to tray ──────────────────────────
         .on_window_event(|window, event| {
@@ -95,7 +98,11 @@ pub fn run() {
                     .enumerate()
                     .map(|(i, m)| (i, m.x, m.y, m.width, m.height))
                     .collect();
-                taskbar::restore_all(&monitors);
+                zen_mode::restore_on_exit(&monitors);
+                // If zen mode wasn't active, still restore any individually hidden taskbars
+                if !zen_mode::is_active() {
+                    taskbar::restore_all(&monitors);
+                }
             }
         });
 }

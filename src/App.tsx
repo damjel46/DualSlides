@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { listen } from "@tauri-apps/api/event";
 import { motion } from "motion/react";
 import { MonitorCard } from "./components/MonitorCard";
 import { MonitorLayout } from "./components/MonitorLayout";
@@ -8,7 +9,7 @@ import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncIntervalFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
-import { startSynced, getImagesFromFolder } from "./lib/commands";
+import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive } from "./lib/commands";
 
 function App() {
   const { t } = useTranslation();
@@ -20,6 +21,44 @@ function App() {
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
   const { syncEnabled, setSync } = useAppConfig();
   const [hasStoredConfigs, setHasStoredConfigs] = useState(false);
+  const [zenActive, setZenActive] = useState(false);
+
+  // Zen mode: load initial state + listen for changes (from tray toggle)
+  useEffect(() => {
+    isZenModeActive().then(setZenActive).catch(() => {});
+    const unlisten = listen<boolean>("zen-mode-changed", (event) => {
+      setZenActive(event.payload);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  // Track whether slideshow was running before zen mode
+  const wasRunningBeforeZen = useRef(false);
+
+  const handleToggleZen = async () => {
+    try {
+      const anyRunningNow = Object.values(statuses).some((s) => s.is_running);
+
+      const active = await toggleZenMode();
+      setZenActive(active);
+
+      if (active) {
+        // Entering zen mode: save current slideshow state
+        wasRunningBeforeZen.current = anyRunningNow;
+        // If not running, start all slideshows
+        if (!anyRunningNow) {
+          await handleStartAll();
+        }
+      } else {
+        // Exiting zen mode: if slideshow wasn't running before, stop it
+        if (!wasRunningBeforeZen.current) {
+          await pause();
+        }
+      }
+    } catch (e) {
+      console.error("Zen mode toggle failed:", e);
+    }
+  };
 
   // Check if there are saved configs in store (for "Start All" on fresh launch)
   useEffect(() => {
@@ -188,9 +227,12 @@ function App() {
             handleStartAll();
           }
           break;
+        case "zen_mode":
+          handleToggleZen();
+          break;
       }
     },
-    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop],
+    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop, handleToggleZen],
   );
 
   const { hotkeys, updateHotkey } = useHotkeys(handleHotkeyAction);
@@ -340,6 +382,8 @@ function App() {
               statuses={statuses}
               selectedIndex={selectedMonitor}
               onSelect={setSelectedMonitor}
+              zenActive={zenActive}
+              onToggleZen={handleToggleZen}
             />
           )}
 

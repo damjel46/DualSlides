@@ -41,6 +41,18 @@
     "hotkeys": "단축키",
     "general": "일반"
   },
+  "zen": {
+    "toggle": "감상 모드",
+    "enabled": "감상 모드 활성화",
+    "disabled": "감상 모드 비활성화",
+    "description": "작업표시줄과 바탕화면 아이콘 숨기기"
+  },
+  "hotkeys": {
+    "next_wallpaper": "다음 배경화면",
+    "prev_wallpaper": "이전 배경화면",
+    "toggle_slideshow": "슬라이드쇼 토글",
+    "zen_mode": "감상 모드"
+  },
   "interval": {
     "10s": "10초",
     "30s": "30초",

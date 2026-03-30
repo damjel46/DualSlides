@@ -7,6 +7,7 @@ use tauri::{
 };
 
 use crate::slideshow::SlideshowEngine;
+use tauri::Emitter;
 
 // ── Hardcoded translations ───────────────────────────────────────────
 // Mirrors the frontend locale JSON — keeps tray working without JS.
@@ -16,6 +17,7 @@ struct TrayStrings {
     next: &'static str,
     pause: &'static str,
     play: &'static str,
+    zen_mode: &'static str,
     quit: &'static str,
 }
 
@@ -26,6 +28,7 @@ fn strings_for(locale: &str) -> TrayStrings {
             next: "다음",
             pause: "일시정지",
             play: "재생",
+            zen_mode: "감상 모드",
             quit: "종료",
         },
         _ => TrayStrings {
@@ -33,6 +36,7 @@ fn strings_for(locale: &str) -> TrayStrings {
             next: "Next",
             pause: "Pause",
             play: "Play",
+            zen_mode: "Zen Mode",
             quit: "Quit",
         },
     }
@@ -67,15 +71,23 @@ pub fn build_tray(app: &AppHandle, locale: &str) -> Result<(), Box<dyn std::erro
     let toggle_label = if any_running { s.pause } else { s.play };
     let toggle_id = if any_running { "pause" } else { "play" };
 
+    let zen_active = crate::zen_mode::is_active();
+    let zen_label = if zen_active {
+        format!("{} ✓", s.zen_mode)
+    } else {
+        s.zen_mode.to_string()
+    };
+
     let settings_item = MenuItem::with_id(app, "settings", s.settings, true, None::<&str>)?;
     let next_item = MenuItem::with_id(app, "next_all", s.next, true, None::<&str>)?;
     let toggle_item = MenuItem::with_id(app, toggle_id, toggle_label, true, None::<&str>)?;
+    let zen_item = MenuItem::with_id(app, "zen", &zen_label, true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", s.quit, true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
-        &[&settings_item, &next_item, &toggle_item, &separator, &quit_item],
+        &[&settings_item, &next_item, &toggle_item, &zen_item, &separator, &quit_item],
     )?;
 
     // Remove existing tray icons before rebuilding
@@ -92,7 +104,7 @@ pub fn build_tray(app: &AppHandle, locale: &str) -> Result<(), Box<dyn std::erro
     TrayIconBuilder::with_id("main-tray")
         .icon(icon)
         .menu(&menu)
-        .tooltip("DualSlide")
+        .tooltip(if zen_active { "DualSlide — Zen Mode" } else { "DualSlide" })
         .on_menu_event(handle_menu_event)
         .on_tray_icon_event(handle_tray_icon_event)
         .build(app)?;
@@ -131,6 +143,22 @@ fn handle_menu_event(app: &AppHandle<Wry>, event: MenuEvent) {
                 if let Err(e) = engine.resume_all() {
                     log::error!("Tray resume_all: {}", e);
                 }
+            }
+            let locale = current_locale(app);
+            let _ = build_tray(app, &locale);
+        }
+        "zen" => {
+            let monitors: Vec<(usize, i32, i32, u32, u32)> =
+                crate::monitor::get_all_monitors(app)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, m)| (i, m.x, m.y, m.width, m.height))
+                    .collect();
+            match crate::zen_mode::toggle(&monitors) {
+                Ok(active) => {
+                    let _ = app.emit("zen-mode-changed", active);
+                }
+                Err(e) => log::error!("Tray zen toggle: {}", e),
             }
             let locale = current_locale(app);
             let _ = build_tray(app, &locale);

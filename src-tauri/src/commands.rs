@@ -2,8 +2,9 @@ use crate::monitor::{self, ImageInfo, MonitorInfo};
 use crate::slideshow::{SlideshowEngine, SlideshowMode, SlideshowStatus};
 use crate::taskbar;
 use crate::tray;
+use crate::zen_mode;
 use std::collections::HashMap;
-use tauri::State;
+use tauri::{Emitter, State};
 
 // ── Monitor & Wallpaper ──────────────────────────────────────────────
 
@@ -130,6 +131,25 @@ pub fn get_taskbar_visible(
     height: u32,
 ) -> bool {
     taskbar::get_taskbar_visible(monitor_index, x, y, width, height)
+}
+
+// ── Zen Mode ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn toggle_zen_mode(app: tauri::AppHandle) -> Result<bool, String> {
+    let monitors: Vec<(usize, i32, i32, u32, u32)> = monitor::get_all_monitors(&app)
+        .into_iter()
+        .enumerate()
+        .map(|(i, m)| (i, m.x, m.y, m.width, m.height))
+        .collect();
+    let active = zen_mode::toggle(&monitors)?;
+    let _ = app.emit("zen-mode-changed", active);
+    Ok(active)
+}
+
+#[tauri::command]
+pub fn is_zen_mode_active() -> bool {
+    zen_mode::is_active()
 }
 
 // ── Tray ─────────────────────────────────────────────────────────────

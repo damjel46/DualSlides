@@ -11,6 +11,7 @@ const DEFAULT_HOTKEYS: HotkeyBinding[] = [
   { action: "next_wallpaper", shortcut: "Ctrl+Alt+Right" },
   { action: "prev_wallpaper", shortcut: "Ctrl+Alt+Left" },
   { action: "toggle_slideshow", shortcut: "Ctrl+Alt+P" },
+  { action: "zen_mode", shortcut: "Ctrl+Alt+Z" },
 ];
 
 const STORE_FILE = "hotkeys.json";

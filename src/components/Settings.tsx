@@ -196,8 +196,8 @@ export function Settings({
                 <div className="space-y-2">
                   {hotkeys.map((binding) => (
                     <div key={binding.action} className="flex items-center justify-between">
-                      <span className="text-sm capitalize text-ds-text-dim">
-                        {binding.action.replace(/_/g, " ")}
+                      <span className="text-sm text-ds-text-dim">
+                        {t(`hotkeys.${binding.action}`, { defaultValue: binding.action.replace(/_/g, " ") })}
                       </span>
                       <HotkeyInput
                         value={binding.shortcut}

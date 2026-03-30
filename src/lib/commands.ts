@@ -158,6 +158,16 @@ export async function getTaskbarVisible(
   });
 }
 
+// ── Zen Mode ────────────────────────────────────────────────────────
+
+export async function toggleZenMode(): Promise<boolean> {
+  return invoke("toggle_zen_mode");
+}
+
+export async function isZenModeActive(): Promise<boolean> {
+  return invoke("is_zen_mode_active");
+}
+
 // ── Tray ─────────────────────────────────────────────────────────────
 
 export async function updateTrayLocale(locale: string): Promise<void> {

@@ -41,6 +41,18 @@
     "hotkeys": "Hotkeys",
     "general": "General"
   },
+  "zen": {
+    "toggle": "Zen Mode",
+    "enabled": "Zen Mode enabled",
+    "disabled": "Zen Mode disabled",
+    "description": "Hide taskbar and desktop icons"
+  },
+  "hotkeys": {
+    "next_wallpaper": "Next wallpaper",
+    "prev_wallpaper": "Previous wallpaper",
+    "toggle_slideshow": "Toggle slideshow",
+    "zen_mode": "Zen Mode"
+  },
   "interval": {
     "10s": "10 sec",
     "30s": "30 sec",
