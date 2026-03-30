@@ -7,6 +7,7 @@ export interface MonitorConfig {
   selectedFiles: string[];
   images: ImageInfo[];
   excluded: string[];
+  favorites: string[];
   selectionMode: "folder" | "files";
   interval: number;
   useCustom: boolean;
@@ -20,6 +21,7 @@ const DEFAULT_CONFIG: MonitorConfig = {
   selectedFiles: [],
   images: [],
   excluded: [],
+  favorites: [],
   selectionMode: "folder",
   interval: 300,
   useCustom: false,

@@ -60,15 +60,21 @@ function SafeImage({
 function ImageGrid({
   images,
   excluded,
+  favorites,
   currentImage,
   onToggle,
+  onToggleFavorite,
   onReorder,
+  filterFavorites,
 }: {
   images: ImageInfo[];
   excluded: Set<string>;
+  favorites: Set<string>;
   currentImage: string | undefined | null;
   onToggle: (path: string) => void;
+  onToggleFavorite: (path: string) => void;
   onReorder: (imgs: ImageInfo[]) => void;
+  filterFavorites: boolean;
 }) {
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [dragState, setDragState] = useState<{
@@ -141,12 +147,15 @@ function ImageGrid({
     });
   };
 
+  const displayImages = filterFavorites ? images.filter((img) => favorites.has(img.path)) : images;
+
   return (
     <>
       <div className="flex max-h-96 flex-wrap content-start gap-1.5 overflow-x-hidden overflow-y-auto rounded-xl border border-ds-border bg-ds-bg/30 p-2">
-        {images.map((img) => {
+        {displayImages.map((img) => {
           const isChecked = !excluded.has(img.path);
           const isCurrent = currentImage === img.path;
+          const isFav = favorites.has(img.path);
           const isBeingDragged = dragState?.path === img.path;
           return (
             <div
@@ -202,6 +211,20 @@ function ImageGrid({
                 </div>
               )}
 
+              {/* Favorite heart */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleFavorite(img.path); }}
+                className={`absolute top-1 left-1 z-20 flex h-5 w-5 items-center justify-center rounded-full transition ${
+                  isFav
+                    ? "bg-red-500/80 text-white opacity-100"
+                    : "bg-black/40 text-white/60 opacity-0 group-hover:opacity-100 hover:text-red-400"
+                }`}
+              >
+                <svg className="h-3 w-3" fill={isFav ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </button>
+
               {/* Filename */}
               <div className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-lg bg-gradient-to-t from-black/70 to-transparent px-1.5 py-1 opacity-0 transition group-hover:opacity-100">
                 <span className="block truncate text-[9px] text-white">
@@ -242,6 +265,8 @@ interface MonitorCardProps {
   monitor: MonitorInfo;
   status: SlideshowStatus | undefined;
   syncEnabled: boolean;
+  pinned: boolean;
+  onTogglePin: () => void;
   onSyncToggle: (sourceMonitorId: string) => void;
   onStartFiles: (
     monitorId: string,
@@ -268,6 +293,8 @@ export function MonitorCard({
   monitor,
   status,
   syncEnabled,
+  pinned,
+  onTogglePin,
   onSyncToggle,
   onStartFiles,
   onStop,
@@ -297,12 +324,15 @@ export function MonitorCard({
     }
   };
 
+  const [filterFavorites, setFilterFavorites] = useState(false);
+
   // Destructure for convenience
   const {
-    folder, selectedFiles, images, excluded: excludedArr,
+    folder, selectedFiles, images, excluded: excludedArr, favorites: favoritesArr,
     selectionMode, interval, useCustom, customInput, mode, autoRefresh,
   } = config;
   const excluded = new Set(excludedArr);
+  const favorites = new Set(favoritesArr);
 
   // Scan folder on change + poll every 5s for new/deleted files
   useEffect(() => {
@@ -395,6 +425,13 @@ export function MonitorCard({
     update({ excluded: [...next] });
   };
 
+  const toggleFavorite = (path: string) => {
+    const next = new Set(favorites);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    update({ favorites: [...next] });
+  };
+
   const setImages = (imgs: ImageInfo[]) => update({ images: imgs });
 
   const checkedCount = images.length - excluded.size;
@@ -432,9 +469,20 @@ export function MonitorCard({
     const activePaths = images
       .filter((img) => !excluded.has(img.path))
       .map((img) => img.path);
-    if (activePaths.length > 0) {
-      onStartFiles(monitor.id, activePaths, effectiveInterval, mode);
+    if (activePaths.length === 0) return;
+
+    // In shuffle mode, duplicate favorite paths 3x for weighted selection
+    let finalPaths = activePaths;
+    if (mode === "Shuffle" && favorites.size > 0) {
+      const extras: string[] = [];
+      for (const p of activePaths) {
+        if (favorites.has(p)) {
+          extras.push(p, p); // 2 extra copies = 3x total
+        }
+      }
+      finalPaths = [...activePaths, ...extras];
     }
+    onStartFiles(monitor.id, finalPaths, effectiveInterval, mode);
   };
 
   const folderName = folder ? folder.split(/[/\\]/).pop() : null;
@@ -547,7 +595,7 @@ export function MonitorCard({
 
           {previewOpen && (
               <div>
-                {/* Select all / Deselect all */}
+                {/* Select all / Deselect all / Favorites filter */}
                 <div className="mb-1.5 flex gap-2 text-[10px]">
                   <button
                     onClick={() => update({ excluded: [] })}
@@ -563,14 +611,28 @@ export function MonitorCard({
                   >
                     {t("monitor.deselect_all")}
                   </button>
+                  {favorites.size > 0 && (
+                    <button
+                      onClick={() => setFilterFavorites(!filterFavorites)}
+                      className={`flex items-center gap-0.5 ${filterFavorites ? "text-red-400" : "text-ds-text-muted hover:text-red-400"}`}
+                    >
+                      <svg className="h-3 w-3" fill={filterFavorites ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
+                      {t("favorite.filter")}
+                    </button>
+                  )}
                 </div>
 
                 <ImageGrid
                   images={images}
                   excluded={excluded}
+                  favorites={favorites}
                   currentImage={status?.current_image}
                   onToggle={toggleCheck}
+                  onToggleFavorite={toggleFavorite}
                   onReorder={setImages}
+                  filterFavorites={filterFavorites}
                 />
               </div>
             )}
@@ -685,6 +747,22 @@ export function MonitorCard({
 
       {/* Playback controls */}
       <div className="mb-3 flex items-center justify-center gap-3 rounded-2xl bg-black/20 py-3 px-4">
+        {/* Pin button */}
+        <button
+          onClick={onTogglePin}
+          disabled={!isRunning}
+          className={`flex h-10 w-10 items-center justify-center rounded-full transition disabled:opacity-30 ${
+            pinned
+              ? "bg-indigo-500/20 text-indigo-400"
+              : "text-ds-text-dim hover:bg-white/10 hover:text-ds-text"
+          }`}
+          title={t("pin.toggle")}
+        >
+          <svg className="h-4 w-4" fill={pinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+        </button>
+
         <button
           onClick={() => onPrev(monitor.id)}
           disabled={!status}
@@ -744,9 +822,16 @@ export function MonitorCard({
       {/* Status bar */}
       {status && (
         <div className="flex items-center justify-between text-xs text-ds-text-muted">
-          <span>
-            {status.current_index + 1} / {status.total_images}
-          </span>
+          <div className="flex items-center gap-2">
+            <span>
+              {status.current_index + 1} / {status.total_images}
+            </span>
+            {pinned && (
+              <span className="rounded-md bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-medium text-indigo-400">
+                {t("pin.pinned")}
+              </span>
+            )}
+          </div>
           {status.current_image && (
             <span className="max-w-[200px] truncate">
               {status.current_image.split(/[/\\]/).pop()}

@@ -24,6 +24,7 @@ pub struct SlideshowStatus {
     pub total_images: usize,
     pub interval_secs: u64,
     pub mode: SlideshowMode,
+    pub is_pinned: bool,
 }
 
 // ── Internal per-monitor state ───────────────────────────────────────
@@ -36,6 +37,7 @@ struct MonitorSlideshow {
     interval_secs: u64,
     mode: SlideshowMode,
     is_running: bool,
+    is_pinned: bool,
     cancel_token: Option<CancellationToken>,
 }
 
@@ -48,6 +50,7 @@ impl MonitorSlideshow {
             total_images: self.images.len(),
             interval_secs: self.interval_secs,
             mode: self.mode.clone(),
+            is_pinned: self.is_pinned,
         }
     }
 }
@@ -117,6 +120,7 @@ impl SlideshowEngine {
                     interval_secs,
                     mode: mode.clone(),
                     is_running: true,
+                    is_pinned: false,
                     cancel_token: Some(token.clone()),
                 },
             );
@@ -193,6 +197,7 @@ impl SlideshowEngine {
                     interval_secs,
                     mode: mode.clone(),
                     is_running: true,
+                    is_pinned: false,
                     cancel_token: Some(token.clone()),
                 },
             );
@@ -245,6 +250,13 @@ impl SlideshowEngine {
                 }
 
                 if token.is_cancelled() { break; }
+
+                // Check if pinned — skip wallpaper change but keep timer running
+                let pinned = {
+                    let map = monitors.lock().unwrap();
+                    map.get(&mid).map(|ms| ms.is_pinned).unwrap_or(false)
+                };
+                if pinned { continue; }
 
                 // Apply wallpaper (already BMP-cached)
                 let wp_mid = mid.clone();
@@ -468,6 +480,7 @@ impl SlideshowEngine {
                         interval_secs,
                         mode: mode.clone(),
                         is_running: true,
+                        is_pinned: false,
                         cancel_token: Some(token.clone()),
                     },
                 );
@@ -508,41 +521,54 @@ impl SlideshowEngine {
                 }
                 if token.is_cancelled() { break; }
 
-                // All monitors in one blocking call
+                // Check which monitors are pinned
+                let pinned_set: std::collections::HashSet<String> = {
+                    let map = monitors_state.lock().unwrap();
+                    entries.iter()
+                        .filter(|(mid, _)| map.get(mid.as_str()).map(|ms| ms.is_pinned).unwrap_or(false))
+                        .map(|(mid, _)| mid.clone())
+                        .collect()
+                };
+
+                // All unpinned monitors in one blocking call
                 let pairs: Vec<(String, String)> = entries
                     .iter()
-                    .filter(|(_, imgs)| !imgs.is_empty())
+                    .filter(|(mid, imgs)| !imgs.is_empty() && !pinned_set.contains(mid))
                     .map(|(mid, imgs)| (mid.clone(), imgs[index % imgs.len()].clone()))
                     .collect();
 
-                let wp_result = tokio::task::spawn_blocking(move || {
-                    let mut errors = Vec::new();
-                    for (mid, path) in &pairs {
-                        if let Err(e) = monitor::set_wallpaper(mid, path) {
-                            errors.push((mid.clone(), e));
+                if !pairs.is_empty() {
+                    let wp_result = tokio::task::spawn_blocking(move || {
+                        let mut errors = Vec::new();
+                        for (mid, path) in &pairs {
+                            if let Err(e) = monitor::set_wallpaper(mid, path) {
+                                errors.push((mid.clone(), e));
+                            }
                         }
-                    }
-                    errors
-                }).await;
+                        errors
+                    }).await;
 
-                if let Ok(errors) = wp_result {
-                    for (mid, e) in errors {
-                        log::error!("[{}] set_wallpaper failed: {}", mid, e);
+                    if let Ok(errors) = wp_result {
+                        for (mid, e) in errors {
+                            log::error!("[{}] set_wallpaper failed: {}", mid, e);
+                        }
                     }
                 }
 
-                // Update state
+                // Update state for unpinned monitors only
                 {
                     let mut map = monitors_state.lock().unwrap();
                     for (mid, images) in &entries {
+                        if pinned_set.contains(mid) { continue; }
                         if let Some(ms) = map.get_mut(mid.as_str()) {
                             ms.current_index = index % images.len();
                         }
                     }
                 }
 
-                // Pre-convert next
-                for (_, images) in &entries {
+                // Pre-convert next for unpinned monitors
+                for (mid, images) in &entries {
+                    if pinned_set.contains(mid) { continue; }
                     let total = images.len();
                     if total == 0 { continue; }
                     let p = images[(index + 1) % total].clone();
@@ -609,6 +635,7 @@ impl SlideshowEngine {
                         interval_secs,
                         mode: mode.clone(),
                         is_running: true,
+                        is_pinned: false,
                         cancel_token: Some(token.clone()),
                     },
                 );
@@ -658,38 +685,50 @@ impl SlideshowEngine {
 
                 if token.is_cancelled() { break; }
 
-                // Set wallpapers for ALL monitors in ONE blocking call
+                // Check which monitors are pinned
+                let pinned_set: std::collections::HashSet<String> = {
+                    let map = monitors.lock().unwrap();
+                    monitor_data.iter()
+                        .filter(|(mid, _)| map.get(mid.as_str()).map(|ms| ms.is_pinned).unwrap_or(false))
+                        .map(|(mid, _)| mid.clone())
+                        .collect()
+                };
+
+                // Set wallpapers for unpinned monitors
                 let pairs: Vec<(String, String)> = monitor_data
                     .iter()
-                    .filter(|(_, imgs)| !imgs.is_empty())
+                    .filter(|(mid, imgs)| !imgs.is_empty() && !pinned_set.contains(mid))
                     .map(|(mid, imgs)| {
                         (mid.clone(), imgs[index % imgs.len()].clone())
                     })
                     .collect();
 
-                let wp_result = tokio::task::spawn_blocking(move || {
-                    let mut errors = Vec::new();
-                    for (mid, path) in &pairs {
-                        if let Err(e) = monitor::set_wallpaper(mid, path) {
-                            errors.push((mid.clone(), e));
+                if !pairs.is_empty() {
+                    let wp_result = tokio::task::spawn_blocking(move || {
+                        let mut errors = Vec::new();
+                        for (mid, path) in &pairs {
+                            if let Err(e) = monitor::set_wallpaper(mid, path) {
+                                errors.push((mid.clone(), e));
+                            }
                         }
-                    }
-                    errors
-                }).await;
+                        errors
+                    }).await;
 
-                match wp_result {
-                    Ok(errors) => {
-                        for (mid, e) in errors {
-                            log::error!("[{}] set_wallpaper failed: {}", mid, e);
+                    match wp_result {
+                        Ok(errors) => {
+                            for (mid, e) in errors {
+                                log::error!("[{}] set_wallpaper failed: {}", mid, e);
+                            }
                         }
+                        Err(e) => log::error!("spawn_blocking panic: {}", e),
                     }
-                    Err(e) => log::error!("spawn_blocking panic: {}", e),
                 }
 
-                // Update state for all monitors
+                // Update state for unpinned monitors
                 {
                     let mut map = monitors.lock().unwrap();
                     for (mid, images) in &monitor_data {
+                        if pinned_set.contains(mid) { continue; }
                         let total = images.len();
                         if let Some(ms) = map.get_mut(mid.as_str()) {
                             ms.current_index = index % total;
@@ -697,8 +736,9 @@ impl SlideshowEngine {
                     }
                 }
 
-                // Pre-convert NEXT images in background
-                for (_, images) in &monitor_data {
+                // Pre-convert NEXT images for unpinned monitors
+                for (mid, images) in &monitor_data {
+                    if pinned_set.contains(mid) { continue; }
                     let total = images.len();
                     if total == 0 { continue; }
                     let next_path = images[(index + 1) % total].clone();
@@ -724,7 +764,29 @@ impl SlideshowEngine {
         Ok(())
     }
 
-    // ── 6. get_status ────────────────────────────────────────────────
+    // ── 7. pin ─────────────────────────────────────────────────────────
+
+    pub fn toggle_pin_all(&self) -> bool {
+        let mut map = self.monitors.lock().unwrap();
+        // If any monitor is unpinned, pin all; otherwise unpin all
+        let any_unpinned = map.values().any(|ms| ms.is_running && !ms.is_pinned);
+        let new_state = any_unpinned;
+        for ms in map.values_mut() {
+            if ms.is_running {
+                ms.is_pinned = new_state;
+            }
+        }
+        log::info!("Pin all: {}", if new_state { "pinned" } else { "unpinned" });
+        new_state
+    }
+
+    pub fn is_all_pinned(&self) -> bool {
+        let map = self.monitors.lock().unwrap();
+        let running: Vec<_> = map.values().filter(|ms| ms.is_running).collect();
+        !running.is_empty() && running.iter().all(|ms| ms.is_pinned)
+    }
+
+    // ── 8. get_status ────────────────────────────────────────────────
 
     pub fn get_status(&self) -> HashMap<String, SlideshowStatus> {
         let map = self.monitors.lock().unwrap();

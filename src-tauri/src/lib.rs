@@ -76,6 +76,8 @@ pub fn run() {
             commands::get_monitor_slideshow_status,
             commands::sync_restart_all,
             commands::update_tray_locale,
+            commands::toggle_pin_all,
+            commands::is_all_pinned,
             commands::set_taskbar_visible,
             commands::get_taskbar_visible,
             commands::toggle_zen_mode,

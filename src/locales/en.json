@@ -47,11 +47,24 @@
     "disabled": "Zen Mode disabled",
     "description": "Hide taskbar and desktop icons"
   },
+  "pin": {
+    "toggle": "Pin wallpaper",
+    "pinned": "Pinned",
+    "unpinned": "Unpinned"
+  },
+  "favorite": {
+    "toggle": "Favorite",
+    "add": "Added to favorites",
+    "remove": "Removed from favorites",
+    "filter": "Favorites only"
+  },
   "hotkeys": {
     "next_wallpaper": "Next wallpaper",
     "prev_wallpaper": "Previous wallpaper",
     "toggle_slideshow": "Toggle slideshow",
-    "zen_mode": "Zen Mode"
+    "zen_mode": "Zen Mode",
+    "pin_wallpaper": "Pin Wallpaper",
+    "favorite_current": "Favorite Current"
   },
   "interval": {
     "10s": "10 sec",

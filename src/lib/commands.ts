@@ -27,6 +27,7 @@ export interface SlideshowStatus {
   total_images: number;
   interval_secs: number;
   mode: SlideshowMode;
+  is_pinned: boolean;
 }
 
 // ── Monitor & Wallpaper ──────────────────────────────────────────────
@@ -120,6 +121,16 @@ export async function getMonitorSlideshowStatus(
 
 export async function syncRestartAll(): Promise<void> {
   return invoke("sync_restart_all");
+}
+
+// ── Pin ─────────────────────────────────────────────────────────────
+
+export async function togglePinAll(): Promise<boolean> {
+  return invoke("toggle_pin_all");
+}
+
+export async function isAllPinned(): Promise<boolean> {
+  return invoke("is_all_pinned");
 }
 
 // ── Taskbar ──────────────────────────────────────────────────────────

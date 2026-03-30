@@ -108,6 +108,18 @@ pub fn sync_restart_all(engine: State<'_, SlideshowEngine>) -> Result<(), String
     engine.sync_restart_all()
 }
 
+// ── Pin ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn toggle_pin_all(engine: State<'_, SlideshowEngine>) -> bool {
+    engine.toggle_pin_all()
+}
+
+#[tauri::command]
+pub fn is_all_pinned(engine: State<'_, SlideshowEngine>) -> bool {
+    engine.is_all_pinned()
+}
+
 // ── Taskbar ──────────────────────────────────────────────────────────
 
 #[tauri::command]

@@ -9,7 +9,7 @@ import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncIntervalFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
-import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive } from "./lib/commands";
+import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll } from "./lib/commands";
 
 function App() {
   const { t } = useTranslation();
@@ -22,6 +22,7 @@ function App() {
   const { syncEnabled, setSync } = useAppConfig();
   const [hasStoredConfigs, setHasStoredConfigs] = useState(false);
   const [zenActive, setZenActive] = useState(false);
+  const [allPinned, setAllPinned] = useState(false);
 
   // Zen mode: load initial state + listen for changes (from tray toggle)
   useEffect(() => {
@@ -58,6 +59,40 @@ function App() {
     } catch (e) {
       console.error("Zen mode toggle failed:", e);
     }
+  };
+
+  const handleTogglePin = async () => {
+    try {
+      const pinned = await togglePinAll();
+      setAllPinned(pinned);
+    } catch (e) {
+      console.error("Pin toggle failed:", e);
+    }
+  };
+
+  const handleToggleFavoriteCurrent = async () => {
+    if (!selectedMonitor) return;
+    const mon = monitors[selectedMonitor];
+    if (!mon) return;
+    const currentStatus = statuses[mon.id];
+    if (!currentStatus?.current_image) return;
+
+    const allConfigs = await getAllMonitorConfigs();
+    const cfg = allConfigs[mon.id];
+    if (!cfg) return;
+
+    const favSet = new Set(cfg.favorites || []);
+    const path = currentStatus.current_image;
+    if (favSet.has(path)) {
+      favSet.delete(path);
+    } else {
+      favSet.add(path);
+    }
+
+    // Save directly to store
+    const { load } = await import("@tauri-apps/plugin-store");
+    const store = await load("monitor-configs.json", { autoSave: true, defaults: {} });
+    await store.set(mon.id, { ...cfg, favorites: [...favSet] });
   };
 
   // Check if there are saved configs in store (for "Start All" on fresh launch)
@@ -98,9 +133,21 @@ function App() {
       }
 
       if (activePaths.length > 0) {
+        // In shuffle mode, duplicate favorite paths 3x for weighted selection
+        let finalPaths = activePaths;
+        if (cfg.mode === "Shuffle" && cfg.favorites && cfg.favorites.length > 0) {
+          const favSet = new Set(cfg.favorites);
+          const extras: string[] = [];
+          for (const p of activePaths) {
+            if (favSet.has(p)) {
+              extras.push(p, p); // 2 extra copies = 3x total
+            }
+          }
+          finalPaths = [...activePaths, ...extras];
+        }
         perMonitor.push({
           mid,
-          paths: activePaths,
+          paths: finalPaths,
           interval: cfg.interval,
           mode: cfg.mode,
         });
@@ -163,12 +210,20 @@ function App() {
       // Add other monitors from store
       for (const [mid, cfg] of Object.entries(allConfigs)) {
         if (mid === monitorId) continue;
-        const activePaths = cfg.images
+        let activePaths = cfg.images
           .filter((img) => !cfg.excluded.includes(img.path))
           .map((img) => img.path);
-        if (activePaths.length > 0) {
-          monitorsData.push([mid, activePaths]);
+        if (activePaths.length === 0) continue;
+        // Apply favorite weighting in shuffle mode
+        if (mode === "Shuffle" && cfg.favorites && cfg.favorites.length > 0) {
+          const favSet = new Set(cfg.favorites);
+          const extras: string[] = [];
+          for (const p of activePaths) {
+            if (favSet.has(p)) extras.push(p, p);
+          }
+          activePaths = [...activePaths, ...extras];
         }
+        monitorsData.push([mid, activePaths]);
       }
 
       await startSynced(monitorsData, intervalSecs, mode);
@@ -206,6 +261,16 @@ function App() {
     }
   };
 
+  // Sync pin state from backend statuses
+  useEffect(() => {
+    const running = Object.values(statuses).filter((s) => s.is_running);
+    if (running.length > 0) {
+      setAllPinned(running.every((s) => s.is_pinned));
+    } else {
+      setAllPinned(false);
+    }
+  }, [statuses]);
+
   const anyRunning = Object.values(statuses).some((s) => s.is_running);
   const anyStopped = Object.values(statuses).some(
     (s) => !s.is_running && s.total_images > 0,
@@ -230,9 +295,15 @@ function App() {
         case "zen_mode":
           handleToggleZen();
           break;
+        case "pin_wallpaper":
+          handleTogglePin();
+          break;
+        case "favorite_current":
+          handleToggleFavoriteCurrent();
+          break;
       }
     },
-    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop, handleToggleZen],
+    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop, handleToggleZen, handleTogglePin, handleToggleFavoriteCurrent],
   );
 
   const { hotkeys, updateHotkey } = useHotkeys(handleHotkeyAction);
@@ -393,6 +464,8 @@ function App() {
               monitor={selectedMon}
               status={statuses[selectedMon.id]}
               syncEnabled={syncEnabled}
+              pinned={allPinned}
+              onTogglePin={handleTogglePin}
               onSyncToggle={handleSyncToggle}
               onStartFiles={startFilesWithSync}
               onStop={stopWithSync}
