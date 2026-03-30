@@ -17,6 +17,7 @@
     "deselect_all": "Deselect all",
     "not_configured": "Not configured",
     "auto_refresh": "Auto refresh",
+    "hide_taskbar": "Hide taskbar",
     "select_monitor": "Select a monitor above to configure"
   },
   "slideshow": {

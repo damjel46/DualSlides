@@ -59,9 +59,9 @@ export function MonitorLayout({
   const shrink = 0.94; // shrink each monitor to create visual gaps
 
   return (
-    <div className="mb-6 flex justify-center">
+    <div className="flex justify-center">
       <div
-        className="relative rounded-2xl border border-ds-border bg-ds-card/30 p-5"
+        className="relative rounded-2xl bg-[#0d0d1f] border border-white/5 p-5 shadow-inner shadow-black/40"
         style={{
           width: totalW * scale + 40,
           height: totalH * scale + 40,
@@ -82,10 +82,10 @@ export function MonitorLayout({
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.08, duration: 0.25 }}
-              className={`absolute overflow-hidden rounded-xl border-2 transition-all ${
+              className={`absolute overflow-hidden rounded-xl transition-all duration-200 ${
                 isSelected
-                  ? "border-ds-accent shadow-[0_0_20px_rgba(99,102,241,0.3)]"
-                  : "border-ds-border hover:border-ds-accent/50"
+                  ? "border-2 border-transparent shadow-[0_0_0_2px_#6366f1,0_0_20px_rgba(99,102,241,0.3)] -translate-y-1"
+                  : "border border-white/[0.08] hover:-translate-y-0.5 hover:border-white/[0.15] hover:shadow-lg"
               }`}
               style={{
                 left: (monitor.x - minX) * scale + 20 + (monitor.width * scale * (1 - shrink)) / 2,
@@ -96,10 +96,19 @@ export function MonitorLayout({
             >
               {/* Crossfade background thumbnail */}
               <CrossfadeThumb src={thumbSrc} />
-              {!thumbSrc && <div className="absolute inset-0 bg-ds-card" />}
+              {!thumbSrc && (
+                <div className={`absolute inset-0 ${isSelected ? "bg-gradient-to-br from-indigo-900/40 to-purple-900/30" : "bg-ds-card"}`} />
+              )}
+              {thumbSrc && isSelected && (
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-purple-600/10" />
+              )}
 
               {/* Overlay content */}
               <div className="relative z-10 flex h-full flex-col items-center justify-center gap-1 p-2">
+                {/* Monitor label */}
+                <span className="text-[9px] font-medium uppercase tracking-wider text-ds-text-muted drop-shadow-sm">
+                  {t("monitor.label", { defaultValue: "Monitor" })}
+                </span>
                 <span className="text-sm font-semibold text-ds-text drop-shadow-sm">
                   {monitor.name}
                 </span>
@@ -108,7 +117,15 @@ export function MonitorLayout({
                 </span>
 
                 {/* Badges */}
-                <div className="mt-1 flex items-center gap-1">
+                <div className="mt-1 flex items-center gap-1.5">
+                  {/* Status indicator dot */}
+                  {status && (
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      isRunning
+                        ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]"
+                        : "bg-slate-500"
+                    }`} />
+                  )}
                   {monitor.is_primary && (
                     <span className="rounded bg-ds-accent/80 px-1.5 py-0.5 text-[9px] font-bold text-white">
                       {t("monitor.primary")}

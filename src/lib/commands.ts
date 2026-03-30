@@ -122,6 +122,42 @@ export async function syncRestartAll(): Promise<void> {
   return invoke("sync_restart_all");
 }
 
+// ── Taskbar ──────────────────────────────────────────────────────────
+
+export async function setTaskbarVisible(
+  monitorIndex: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  visible: boolean,
+): Promise<void> {
+  return invoke("set_taskbar_visible", {
+    monitorIndex,
+    x,
+    y,
+    width,
+    height,
+    visible,
+  });
+}
+
+export async function getTaskbarVisible(
+  monitorIndex: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): Promise<boolean> {
+  return invoke("get_taskbar_visible", {
+    monitorIndex,
+    x,
+    y,
+    width,
+    height,
+  });
+}
+
 // ── Tray ─────────────────────────────────────────────────────────────
 
 export async function updateTrayLocale(locale: string): Promise<void> {

@@ -3,6 +3,7 @@ mod hotkey;
 mod monitor;
 mod profiles;
 mod slideshow;
+mod taskbar;
 mod tray;
 
 use slideshow::SlideshowEngine;
@@ -74,6 +75,8 @@ pub fn run() {
             commands::get_monitor_slideshow_status,
             commands::sync_restart_all,
             commands::update_tray_locale,
+            commands::set_taskbar_visible,
+            commands::get_taskbar_visible,
         ])
         // ── Window close → hide to tray ──────────────────────────
         .on_window_event(|window, event| {
@@ -82,6 +85,17 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Restore all hidden taskbars before exit
+                let monitors: Vec<(usize, i32, i32, u32, u32)> = monitor::get_all_monitors(app)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, m)| (i, m.x, m.y, m.width, m.height))
+                    .collect();
+                taskbar::restore_all(&monitors);
+            }
+        });
 }

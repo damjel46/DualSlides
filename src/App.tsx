@@ -137,6 +137,28 @@ function App() {
     await refresh();
   };
 
+  const nextWithSync = async (monitorId: string) => {
+    if (syncEnabled) {
+      const running = Object.entries(statuses).filter(([, s]) => s.is_running);
+      for (const [mid] of running) {
+        await next(mid);
+      }
+    } else {
+      await next(monitorId);
+    }
+  };
+
+  const prevWithSync = async (monitorId: string) => {
+    if (syncEnabled) {
+      const running = Object.entries(statuses).filter(([, s]) => s.is_running);
+      for (const [mid] of running) {
+        await prev(mid);
+      }
+    } else {
+      await prev(monitorId);
+    }
+  };
+
   const stopWithSync = async (monitorId: string) => {
     if (syncEnabled) {
       await pause();
@@ -154,10 +176,10 @@ function App() {
     (action: string) => {
       switch (action) {
         case "next_wallpaper":
-          next(selectedMonitorId);
+          nextWithSync(selectedMonitorId);
           break;
         case "prev_wallpaper":
-          prev(selectedMonitorId);
+          prevWithSync(selectedMonitorId);
           break;
         case "toggle_slideshow":
           if (statuses[selectedMonitorId]?.is_running) {
@@ -168,7 +190,7 @@ function App() {
           break;
       }
     },
-    [selectedMonitorId, statuses, next, prev, stop],
+    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop],
   );
 
   const { hotkeys, updateHotkey } = useHotkeys(handleHotkeyAction);
@@ -330,8 +352,8 @@ function App() {
               onSyncToggle={handleSyncToggle}
               onStartFiles={startFilesWithSync}
               onStop={stopWithSync}
-              onNext={next}
-              onPrev={prev}
+              onNext={nextWithSync}
+              onPrev={prevWithSync}
             />
           ) : (
             !loading &&

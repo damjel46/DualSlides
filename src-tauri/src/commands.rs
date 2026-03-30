@@ -1,5 +1,6 @@
 use crate::monitor::{self, ImageInfo, MonitorInfo};
 use crate::slideshow::{SlideshowEngine, SlideshowMode, SlideshowStatus};
+use crate::taskbar;
 use crate::tray;
 use std::collections::HashMap;
 use tauri::State;
@@ -104,6 +105,31 @@ pub fn get_monitor_slideshow_status(
 #[tauri::command]
 pub fn sync_restart_all(engine: State<'_, SlideshowEngine>) -> Result<(), String> {
     engine.sync_restart_all()
+}
+
+// ── Taskbar ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn set_taskbar_visible(
+    monitor_index: usize,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    visible: bool,
+) -> Result<(), String> {
+    taskbar::set_taskbar_visible(monitor_index, x, y, width, height, visible)
+}
+
+#[tauri::command]
+pub fn get_taskbar_visible(
+    monitor_index: usize,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> bool {
+    taskbar::get_taskbar_visible(monitor_index, x, y, width, height)
 }
 
 // ── Tray ─────────────────────────────────────────────────────────────

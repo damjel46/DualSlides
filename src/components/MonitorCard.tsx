@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { getImagesFromFolder } from "../lib/commands";
+import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible } from "../lib/commands";
 import { useMonitorConfig, syncIntervalFromMonitor } from "../hooks/useMonitorConfig";
 import type {
   MonitorInfo,
@@ -179,12 +179,12 @@ function ImageGrid({
                 <SafeImage
                   src={convertFileSrc(img.path)}
                   alt={img.filename}
-                  className={`pointer-events-none h-full min-w-16 w-auto rounded-lg transition ${
+                  className={`pointer-events-none h-full min-w-16 w-auto rounded-lg transition-all duration-200 ${
                     !isChecked
-                      ? "opacity-30 grayscale"
+                      ? "opacity-30 grayscale ring-1 ring-white/5"
                       : isCurrent
-                        ? "ring-2 ring-ds-accent"
-                        : "opacity-80 group-hover:opacity-100"
+                        ? "ring-2 ring-indigo-500 hover:scale-110"
+                        : "opacity-80 ring-1 ring-white/5 group-hover:opacity-100 group-hover:scale-110"
                   }`}
                 />
               </button>
@@ -277,6 +277,25 @@ export function MonitorCard({
   const { t } = useTranslation();
   const { config, update, loaded } = useMonitorConfig(monitor.id);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [taskbarHidden, setTaskbarHidden] = useState(false);
+
+  // Read initial taskbar visibility
+  const monitorIndex = parseInt(monitor.id.replace("monitor_", ""), 10);
+  useEffect(() => {
+    getTaskbarVisible(monitorIndex, monitor.x, monitor.y, monitor.width, monitor.height)
+      .then((visible) => setTaskbarHidden(!visible))
+      .catch(() => {});
+  }, [monitorIndex, monitor.x, monitor.y, monitor.width, monitor.height]);
+
+  const handleTaskbarToggle = async () => {
+    const newHidden = !taskbarHidden;
+    try {
+      await setTaskbarVisible(monitorIndex, monitor.x, monitor.y, monitor.width, monitor.height, !newHidden);
+      setTaskbarHidden(newHidden);
+    } catch (e) {
+      console.error("Taskbar toggle failed:", e);
+    }
+  };
 
   // Destructure for convenience
   const {
@@ -420,16 +439,15 @@ export function MonitorCard({
 
   const folderName = folder ? folder.split(/[/\\]/).pop() : null;
   const isPreset = !useCustom && PRESETS.some((p) => p.value === interval);
-  const selectValue = useCustom
-    ? "custom"
-    : isPreset
-      ? String(interval)
-      : "custom";
 
   if (!loaded) return null;
 
   return (
-    <div className="rounded-2xl border border-ds-border bg-ds-card p-5">
+    <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#1a1a3e] to-[#16162e] shadow-xl shadow-black/30 overflow-hidden">
+      {/* Top accent bar */}
+      <div className={`h-px bg-gradient-to-r from-transparent ${isRunning ? "via-emerald-500" : "via-indigo-500"} to-transparent`} />
+
+      <div className="p-5">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -448,6 +466,12 @@ export function MonitorCard({
       </div>
 
       {/* Source selection */}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="flex items-center gap-2 mr-2">
+          <div className="w-0.5 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-purple-500" />
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">{t("monitor.source", { defaultValue: "Source" })}</span>
+        </div>
+      </div>
       <div className="mb-4 flex gap-2">
         <button
           onClick={handleSelectFolder}
@@ -554,19 +578,43 @@ export function MonitorCard({
       )}
 
       {/* Controls row: Interval → Sync → Mode */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-ds-text-muted">{t("monitor.interval")}</span>
-          <select
-            value={selectValue}
-            onChange={(e) => handlePresetChange(e.target.value)}
-            className="rounded-lg border border-ds-border bg-ds-bg/50 px-2 py-1.5 text-xs text-ds-text"
+      <div className="mb-4 space-y-3">
+        {/* Section header */}
+        <div className="flex items-center gap-2">
+          <div className="w-0.5 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-purple-500" />
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">{t("monitor.interval")}</span>
+        </div>
+
+        {/* Interval segmented control */}
+        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-0.5 rounded-xl bg-black/30 p-1">
+          {PRESETS.map((p) => {
+            const isActive = !useCustom && interval === p.value;
+            return (
+              <button
+                key={p.value}
+                onClick={() => handlePresetChange(String(p.value))}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
+                    : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
+                }`}
+              >
+                {t(`interval.${p.key}`)}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => handlePresetChange("custom")}
+            className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
+              useCustom
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
+                : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
+            }`}
           >
-            {PRESETS.map((p) => (
-              <option key={p.value} value={p.value}>{t(`interval.${p.key}`)}</option>
-            ))}
-            <option value="custom">{t("interval.custom")}</option>
-          </select>
+            {t("interval.custom")}
+          </button>
+        </div>
           {useCustom && (
             <div className="flex items-center gap-1">
               <input
@@ -577,13 +625,15 @@ export function MonitorCard({
                 onChange={(e) => update({ customInput: e.target.value })}
                 onBlur={handleCustomBlur}
                 onKeyDown={(e) => e.key === "Enter" && handleCustomBlur()}
-                className="w-16 rounded-lg border border-ds-border bg-ds-bg/50 px-2 py-1.5 text-center text-xs text-ds-text"
+                className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-center text-xs text-ds-text"
                 placeholder="sec"
               />
               <span className="text-[10px] text-ds-text-muted">{t("interval.seconds")}</span>
             </div>
           )}
         </div>
+
+        <div className="flex flex-wrap items-center gap-3">
 
         <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-ds-accent/50">
           <input
@@ -595,39 +645,50 @@ export function MonitorCard({
           {t("slideshow.sync_timers")}
         </label>
 
+        <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-ds-accent/50">
+          <input
+            type="checkbox"
+            checked={taskbarHidden}
+            onChange={handleTaskbarToggle}
+            className="h-3.5 w-3.5 accent-ds-accent"
+          />
+          {t("monitor.hide_taskbar")}
+        </label>
+
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-ds-text-muted">{t("monitor.mode")}</span>
-          <div className="flex rounded-lg border border-ds-border">
+          <div className="flex rounded-lg overflow-hidden bg-black/30">
             <button
               onClick={() => update({ mode: "Sequential" })}
-              className={`rounded-l-lg px-2.5 py-1.5 text-xs transition ${
+              className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
                 mode === "Sequential"
-                  ? "bg-ds-accent text-white"
-                  : "bg-ds-bg/50 text-ds-text-muted hover:text-ds-text"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
+                  : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
               }`}
             >
               {t("slideshow.sequential")}
             </button>
             <button
               onClick={() => update({ mode: "Shuffle" })}
-              className={`rounded-r-lg px-2.5 py-1.5 text-xs transition ${
+              className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
                 mode === "Shuffle"
-                  ? "bg-ds-accent text-white"
-                  : "bg-ds-bg/50 text-ds-text-muted hover:text-ds-text"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
+                  : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
               }`}
             >
               {t("slideshow.shuffle")}
             </button>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Playback controls */}
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex items-center justify-center gap-3 rounded-2xl bg-black/20 py-3 px-4">
         <button
           onClick={() => onPrev(monitor.id)}
           disabled={!status}
-          className="rounded-lg bg-ds-bg/70 px-3 py-2 text-sm text-ds-text-dim transition hover:bg-ds-card-hover disabled:opacity-30"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-ds-text-dim transition hover:bg-white/10 hover:text-ds-text disabled:opacity-30"
           title={t("slideshow.prev")}
         >
           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -643,7 +704,7 @@ export function MonitorCard({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={() => onStop(monitor.id)}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500/20 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+              className="flex h-12 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-red-500/20 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
             >
               <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -658,7 +719,7 @@ export function MonitorCard({
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={handlePlay}
               disabled={!hasImages}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-ds-accent/20 py-2 text-sm font-medium text-ds-accent-light transition hover:bg-ds-accent/30 disabled:opacity-30"
+              className="flex h-12 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-sm font-medium text-white shadow-lg shadow-indigo-500/25 transition hover:shadow-indigo-500/40 hover:brightness-110 disabled:opacity-30 disabled:shadow-none"
             >
               <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
@@ -671,7 +732,7 @@ export function MonitorCard({
         <button
           onClick={() => onNext(monitor.id)}
           disabled={!status}
-          className="rounded-lg bg-ds-bg/70 px-3 py-2 text-sm text-ds-text-dim transition hover:bg-ds-card-hover disabled:opacity-30"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-ds-text-dim transition hover:bg-white/10 hover:text-ds-text disabled:opacity-30"
           title={t("slideshow.next")}
         >
           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -693,6 +754,7 @@ export function MonitorCard({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
