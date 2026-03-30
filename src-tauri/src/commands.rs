@@ -1,4 +1,5 @@
 use crate::monitor::{self, ImageInfo, MonitorInfo};
+use crate::schedule::{Schedule, ScheduleEngine};
 use crate::slideshow::{SlideshowEngine, SlideshowMode, SlideshowStatus};
 use crate::taskbar;
 use crate::tray;
@@ -162,6 +163,45 @@ pub fn toggle_zen_mode(app: tauri::AppHandle) -> Result<bool, String> {
 #[tauri::command]
 pub fn is_zen_mode_active() -> bool {
     zen_mode::is_active()
+}
+
+// ── Schedule ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn set_schedule(
+    app: tauri::AppHandle,
+    engine: State<'_, ScheduleEngine>,
+    schedule: Schedule,
+) -> Result<(), String> {
+    let should_start = schedule.enabled;
+    engine.set_schedule(schedule);
+    if should_start {
+        engine.start_timer(app);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_schedule(engine: State<'_, ScheduleEngine>) -> Schedule {
+    engine.get_schedule()
+}
+
+#[tauri::command]
+pub fn enable_schedule(
+    app: tauri::AppHandle,
+    engine: State<'_, ScheduleEngine>,
+    enabled: bool,
+) -> Result<(), String> {
+    engine.enable(enabled);
+    if enabled {
+        engine.start_timer(app);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_active_schedule_slot(engine: State<'_, ScheduleEngine>) -> Option<String> {
+    engine.get_active_slot()
 }
 
 // ── Tray ─────────────────────────────────────────────────────────────

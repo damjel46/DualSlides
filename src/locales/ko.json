@@ -17,6 +17,8 @@
     "deselect_all": "전체 해제",
     "not_configured": "미설정",
     "auto_refresh": "자동 갱신",
+    "add_folder": "폴더 추가",
+    "add_images": "이미지 추가",
     "hide_taskbar": "작업표시줄 숨기기",
     "select_monitor": "위에서 모니터를 선택하세요"
   },
@@ -39,7 +41,8 @@
     "close_to_tray": "닫을 때 트레이로 최소화",
     "language": "언어",
     "hotkeys": "단축키",
-    "general": "일반"
+    "general": "일반",
+    "schedule": "스케줄"
   },
   "zen": {
     "toggle": "감상 모드",
@@ -65,6 +68,23 @@
     "zen_mode": "감상 모드",
     "pin_wallpaper": "배경화면 고정",
     "favorite_current": "현재 배경화면 즐겨찾기"
+  },
+  "schedule": {
+    "title": "스케줄",
+    "enable": "스케줄 활성화",
+    "add_slot": "시간대 추가",
+    "remove_slot": "삭제",
+    "slot_name": "이름",
+    "start_time": "시작 시간",
+    "current": "현재: {{name}}",
+    "max_slots": "최대 6개 시간대",
+    "select_folders": "모니터별 폴더를 선택하세요",
+    "no_profile": "직접 폴더 지정",
+    "use_profile": "프로필 사용",
+    "no_folders": "폴더 미설정",
+    "change_folders": "변경",
+    "day": "낮",
+    "night": "밤"
   },
   "interval": {
     "10s": "10초",

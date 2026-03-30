@@ -179,6 +179,36 @@ export async function isZenModeActive(): Promise<boolean> {
   return invoke("is_zen_mode_active");
 }
 
+// ── Schedule ─────────────────────────────────────────────────────────
+
+export interface ScheduleSlot {
+  name: string;
+  start_time: string; // "HH:MM"
+  profile_id: string | null;
+  folders: Record<string, string[]>; // monitor_id → folder paths
+}
+
+export interface Schedule {
+  enabled: boolean;
+  slots: ScheduleSlot[];
+}
+
+export async function setSchedule(schedule: Schedule): Promise<void> {
+  return invoke("set_schedule", { schedule });
+}
+
+export async function getSchedule(): Promise<Schedule> {
+  return invoke("get_schedule");
+}
+
+export async function enableSchedule(enabled: boolean): Promise<void> {
+  return invoke("enable_schedule", { enabled });
+}
+
+export async function getActiveScheduleSlot(): Promise<string | null> {
+  return invoke("get_active_schedule_slot");
+}
+
 // ── Tray ─────────────────────────────────────────────────────────────
 
 export async function updateTrayLocale(locale: string): Promise<void> {

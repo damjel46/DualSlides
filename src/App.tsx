@@ -9,7 +9,9 @@ import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncIntervalFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
-import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll } from "./lib/commands";
+import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule } from "./lib/commands";
+import { load } from "@tauri-apps/plugin-store";
+import type { Schedule } from "./lib/commands";
 
 function App() {
   const { t } = useTranslation();
@@ -32,6 +34,55 @@ function App() {
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
+
+  // ── Schedule: restore from store on startup ─────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const store = await load("schedule.json", { autoSave: true, defaults: {} });
+        const saved = await store.get<Schedule>("schedule");
+        if (saved && saved.enabled) {
+          await setSchedule(saved);
+        }
+      } catch { /* no saved schedule */ }
+    })();
+  }, []);
+
+  // ── Schedule: listen for slot changes from backend ──────────────────
+  useEffect(() => {
+    const unlisten = listen<{ slot_index: number; slot_name: string; folders: Record<string, string[]> }>(
+      "schedule-slot-changed",
+      async (event) => {
+        const { folders } = event.payload;
+        const allConfigs = await getAllMonitorConfigs();
+
+        // Stop all current slideshows first
+        await pause();
+
+        // For each monitor with folder mapping, scan all folders and restart slideshow
+        for (const [mid, folderPaths] of Object.entries(folders)) {
+          if (!folderPaths || folderPaths.length === 0) continue;
+          try {
+            const allPaths: string[] = [];
+            for (const folder of folderPaths) {
+              const images = await getImagesFromFolder(folder);
+              allPaths.push(...images.map((img) => img.path));
+            }
+            if (allPaths.length > 0) {
+              const cfg = allConfigs[mid];
+              const interval = cfg?.interval ?? 300;
+              const mode = cfg?.mode ?? "Sequential";
+              await startFiles(mid, allPaths, interval, mode);
+            }
+          } catch (e) {
+            console.error(`Schedule: failed to apply folder for ${mid}:`, e);
+          }
+        }
+        await refresh();
+      },
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, [startFiles, refresh, pause]);
 
   // Track whether slideshow was running before zen mode
   const wasRunningBeforeZen = useRef(false);
@@ -113,20 +164,35 @@ function App() {
     for (const [mid, cfg] of Object.entries(allConfigs)) {
       let activePaths: string[];
 
-      if (cfg.selectionMode === "folder" && cfg.folder) {
-        // Re-scan folder to get fresh file list
+      // Combine folders + individual files
+      const cfgFolders = cfg.folders && cfg.folders.length > 0 ? cfg.folders : cfg.folder ? [cfg.folder] : [];
+      const excludedSet = new Set(cfg.excluded);
+      activePaths = [];
+
+      // Scan folders
+      for (const f of cfgFolders) {
         try {
-          const freshImages = await getImagesFromFolder(cfg.folder);
-          const excludedSet = new Set(cfg.excluded);
-          activePaths = freshImages
-            .filter((img) => !excludedSet.has(img.path))
-            .map((img) => img.path);
-        } catch {
-          activePaths = [];
+          const freshImages = await getImagesFromFolder(f);
+          activePaths.push(
+            ...freshImages
+              .filter((img) => !excludedSet.has(img.path))
+              .map((img) => img.path),
+          );
+        } catch { /* ignore */ }
+      }
+
+      // Add individual files
+      if (cfg.selectedFiles && cfg.selectedFiles.length > 0) {
+        const existing = new Set(activePaths);
+        for (const p of cfg.selectedFiles) {
+          if (!existing.has(p) && !excludedSet.has(p)) {
+            activePaths.push(p);
+          }
         }
-      } else {
-        // File selection mode — use stored list
-        const excludedSet = new Set(cfg.excluded);
+      }
+
+      // Fallback: if no folders/files, use stored images list
+      if (activePaths.length === 0 && cfg.images.length > 0) {
         activePaths = cfg.images
           .filter((img) => !excludedSet.has(img.path))
           .map((img) => img.path);
@@ -493,6 +559,7 @@ function App() {
         onClose={() => setSettingsOpen(false)}
         hotkeys={hotkeys}
         onUpdateHotkey={updateHotkey}
+        monitorIds={monitors.map((m) => m.id)}
       />
     </div>
   );

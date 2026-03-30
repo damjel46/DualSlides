@@ -17,6 +17,8 @@
     "deselect_all": "Deselect all",
     "not_configured": "Not configured",
     "auto_refresh": "Auto refresh",
+    "add_folder": "Add folder",
+    "add_images": "Add images",
     "hide_taskbar": "Hide taskbar",
     "select_monitor": "Select a monitor above to configure"
   },
@@ -39,7 +41,8 @@
     "close_to_tray": "Minimize to tray on close",
     "language": "Language",
     "hotkeys": "Hotkeys",
-    "general": "General"
+    "general": "General",
+    "schedule": "Schedule"
   },
   "zen": {
     "toggle": "Zen Mode",
@@ -65,6 +68,23 @@
     "zen_mode": "Zen Mode",
     "pin_wallpaper": "Pin Wallpaper",
     "favorite_current": "Favorite Current"
+  },
+  "schedule": {
+    "title": "Schedule",
+    "enable": "Enable schedule",
+    "add_slot": "Add time slot",
+    "remove_slot": "Remove",
+    "slot_name": "Name",
+    "start_time": "Start time",
+    "current": "Current: {{name}}",
+    "max_slots": "Maximum 6 time slots",
+    "select_folders": "Select folders for each monitor",
+    "no_profile": "Direct folder mapping",
+    "use_profile": "Use profile",
+    "no_folders": "No folders configured",
+    "change_folders": "Change",
+    "day": "Day",
+    "night": "Night"
   },
   "interval": {
     "10s": "10 sec",

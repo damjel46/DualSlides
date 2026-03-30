@@ -4,6 +4,7 @@ import type { ImageInfo, SlideshowMode } from "../lib/commands";
 
 export interface MonitorConfig {
   folder: string;
+  folders: string[];
   selectedFiles: string[];
   images: ImageInfo[];
   excluded: string[];
@@ -18,6 +19,7 @@ export interface MonitorConfig {
 
 const DEFAULT_CONFIG: MonitorConfig = {
   folder: "",
+  folders: [],
   selectedFiles: [],
   images: [],
   excluded: [],

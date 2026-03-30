@@ -2,11 +2,13 @@ mod commands;
 mod hotkey;
 mod monitor;
 mod profiles;
+mod schedule;
 mod slideshow;
 mod taskbar;
 mod tray;
 mod zen_mode;
 
+use schedule::ScheduleEngine;
 use slideshow::SlideshowEngine;
 use tauri::Manager;
 
@@ -42,6 +44,7 @@ pub fn run() {
 
             // Managed state
             app.manage(SlideshowEngine::new());
+            app.manage(ScheduleEngine::new());
             app.manage(tray::default_locale_state());
 
             // Build system tray (default locale = en)
@@ -82,6 +85,10 @@ pub fn run() {
             commands::get_taskbar_visible,
             commands::toggle_zen_mode,
             commands::is_zen_mode_active,
+            commands::set_schedule,
+            commands::get_schedule,
+            commands::enable_schedule,
+            commands::get_active_schedule_slot,
         ])
         // ── Window close → hide to tray ──────────────────────────
         .on_window_event(|window, event| {

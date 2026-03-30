@@ -328,41 +328,65 @@ export function MonitorCard({
 
   // Destructure for convenience
   const {
-    folder, selectedFiles, images, excluded: excludedArr, favorites: favoritesArr,
+    folder, folders: foldersArr, selectedFiles, images, excluded: excludedArr, favorites: favoritesArr,
     selectionMode, interval, useCustom, customInput, mode, autoRefresh,
   } = config;
   const excluded = new Set(excludedArr);
   const favorites = new Set(favoritesArr);
 
-  // Scan folder on change + poll every 5s for new/deleted files
+  // Effective folders list: migrate from legacy single `folder` field
+  const folders = foldersArr && foldersArr.length > 0 ? foldersArr : folder ? [folder] : [];
+
+  // Scan all folders + merge with selectedFiles
   useEffect(() => {
-    if (!folder || selectionMode !== "folder" || !loaded) return;
+    if (!loaded) return;
+    if (folders.length === 0 && selectedFiles.length === 0) return;
     let cancelled = false;
 
     const scan = async (isInitial: boolean) => {
       try {
-        const fresh = await getImagesFromFolder(folder);
+        // 1. Scan all folders
+        const folderImages: import("../lib/commands").ImageInfo[] = [];
+        for (const f of folders) {
+          const fresh = await getImagesFromFolder(f);
+          folderImages.push(...fresh);
+        }
+
+        // 2. Build individual file entries
+        const fileImages: import("../lib/commands").ImageInfo[] = selectedFiles.map((p) => ({
+          path: p,
+          filename: p.split(/[/\\]/).pop() || p,
+          size_bytes: 0,
+        }));
+
+        // 3. Combine, deduplicate by path
+        const seen = new Set<string>();
+        const allFresh: import("../lib/commands").ImageInfo[] = [];
+        for (const img of [...folderImages, ...fileImages]) {
+          if (!seen.has(img.path)) {
+            seen.add(img.path);
+            allFresh.push(img);
+          }
+        }
+
         if (cancelled) return;
-        const freshPaths = new Set(fresh.map((f) => f.path));
+        const freshPaths = new Set(allFresh.map((f) => f.path));
         const oldPaths = new Set(images.map((f) => f.path));
 
         // Skip update if nothing changed
         if (
           !isInitial &&
-          fresh.length === images.length &&
-          fresh.every((f) => oldPaths.has(f.path))
+          allFresh.length === images.length &&
+          allFresh.every((f) => oldPaths.has(f.path))
         ) return;
 
         if (isInitial && images.length === 0) {
-          // First load — all checked
-          update({ images: fresh, excluded: [] });
+          update({ images: allFresh, excluded: [] });
         } else {
-          // Merge: keep existing order + check state, append new, remove deleted
           const kept = images.filter((img) => freshPaths.has(img.path));
           const keptPaths = new Set(kept.map((k) => k.path));
-          const added = fresh.filter((f) => !keptPaths.has(f.path));
+          const added = allFresh.filter((f) => !keptPaths.has(f.path));
           const merged = [...kept, ...added];
-          // Clean excluded of deleted paths
           const cleanExcluded = excludedArr.filter((p) => freshPaths.has(p));
           update({ images: merged, excluded: cleanExcluded });
         }
@@ -373,7 +397,7 @@ export function MonitorCard({
 
     scan(images.length === 0);
     let id: number | undefined;
-    if (autoRefresh) {
+    if (autoRefresh && folders.length > 0) {
       id = window.setInterval(() => scan(false), 5000);
     }
     return () => {
@@ -381,17 +405,28 @@ export function MonitorCard({
       if (id) clearInterval(id);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folder, selectionMode, loaded, autoRefresh]);
+  }, [folders.join("|"), selectedFiles.join("|"), loaded, autoRefresh]);
 
-  const handleSelectFolder = async () => {
+  const handleAddFolder = async () => {
     const selected = await open({ directory: true, multiple: false });
     if (selected) {
+      const path = selected as string;
+      if (folders.includes(path)) return;
+      const newFolders = [...folders, path];
       update({
-        folder: selected as string,
-        selectedFiles: [],
+        folders: newFolders,
+        folder: newFolders[0],
         selectionMode: "folder",
       });
     }
+  };
+
+  const handleRemoveFolder = (folderPath: string) => {
+    const newFolders = folders.filter((f) => f !== folderPath);
+    update({
+      folders: newFolders,
+      folder: newFolders[0] || "",
+    });
   };
 
   const handleSelectFiles = async () => {
@@ -404,16 +439,11 @@ export function MonitorCard({
     });
     if (selected && Array.isArray(selected) && selected.length > 0) {
       const paths = selected as string[];
+      // Append to existing selectedFiles, deduplicate
+      const existing = new Set(selectedFiles);
+      const newFiles = paths.filter((p) => !existing.has(p));
       update({
-        selectedFiles: paths,
-        folder: "",
-        selectionMode: "files",
-        images: paths.map((p) => ({
-          path: p,
-          filename: p.split(/[/\\]/).pop() || p,
-          size_bytes: 0,
-        })),
-        excluded: [],
+        selectedFiles: [...selectedFiles, ...newFiles],
       });
     }
   };
@@ -485,7 +515,6 @@ export function MonitorCard({
     onStartFiles(monitor.id, finalPaths, effectiveInterval, mode);
   };
 
-  const folderName = folder ? folder.split(/[/\\]/).pop() : null;
   const isPreset = !useCustom && PRESETS.some((p) => p.value === interval);
 
   if (!loaded) return null;
@@ -520,43 +549,78 @@ export function MonitorCard({
           <span className="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">{t("monitor.source", { defaultValue: "Source" })}</span>
         </div>
       </div>
-      <div className="mb-4 flex gap-2">
-        <button
-          onClick={handleSelectFolder}
-          className={`flex flex-1 items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition hover:border-ds-accent/50 ${
-            selectionMode === "folder" && folder
-              ? "border-ds-accent/40 bg-ds-accent/5"
-              : "border-ds-border bg-ds-bg/50"
-          }`}
-        >
-          <svg className="h-4 w-4 shrink-0 text-ds-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-          </svg>
-          <span className={folder ? "truncate text-ds-text" : "text-ds-text-muted"}>
-            {folderName || t("monitor.folder")}
-          </span>
-        </button>
-        <button
-          onClick={handleSelectFiles}
-          className={`flex flex-1 items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition hover:border-ds-accent/50 ${
-            selectionMode === "files" && selectedFiles.length > 0
-              ? "border-ds-accent/40 bg-ds-accent/5"
-              : "border-ds-border bg-ds-bg/50"
-          }`}
-        >
-          <svg className="h-4 w-4 shrink-0 text-ds-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <span className={selectedFiles.length > 0 ? "text-ds-text" : "text-ds-text-muted"}>
-            {selectedFiles.length > 0
-              ? t("monitor.folder_images", { count: selectedFiles.length })
-              : t("monitor.files")}
-          </span>
-        </button>
+      <div className="mb-4 space-y-2">
+        {/* Source list: folders + individual files */}
+        {(folders.length > 0 || selectedFiles.length > 0) && (
+          <div className="space-y-1">
+            {folders.map((f) => (
+              <div key={f} className="flex items-center gap-2 rounded-xl border border-ds-accent/30 bg-ds-accent/5 px-3 py-2">
+                <svg className="h-4 w-4 shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span className="flex-1 truncate text-sm text-ds-text" title={f}>
+                  {f.split(/[/\\]/).pop()}
+                </span>
+                <button
+                  onClick={() => handleRemoveFolder(f)}
+                  className="shrink-0 rounded-lg p-1 text-ds-text-muted transition hover:bg-red-500/20 hover:text-red-400"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {selectedFiles.length > 0 && (
+              <div className="flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/5 px-3 py-2">
+                <svg className="h-4 w-4 shrink-0 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="flex-1 text-sm text-ds-text">
+                  {t("monitor.folder_images", { count: selectedFiles.length })}
+                </span>
+                <button
+                  onClick={() => update({ selectedFiles: [] })}
+                  className="shrink-0 rounded-lg p-1 text-ds-text-muted transition hover:bg-red-500/20 hover:text-red-400"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Auto refresh checkbox — folder mode only */}
-        {selectionMode === "folder" && folder && (
-          <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-ds-accent/50">
+        {/* Action buttons row */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleAddFolder}
+            className="flex flex-1 items-center gap-2 rounded-xl border border-dashed border-ds-border px-3 py-2.5 text-left text-sm transition hover:border-ds-accent/50 hover:bg-ds-accent/5"
+          >
+            <svg className="h-4 w-4 shrink-0 text-ds-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="text-ds-text-muted">
+              {t("monitor.add_folder", { defaultValue: "Add folder" })}
+            </span>
+          </button>
+          <button
+            onClick={handleSelectFiles}
+            className="flex flex-1 items-center gap-2 rounded-xl border border-dashed border-ds-border px-3 py-2.5 text-left text-sm transition hover:border-ds-accent/50 hover:bg-purple-500/5"
+          >
+            <svg className="h-4 w-4 shrink-0 text-ds-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="text-ds-text-muted">
+              {t("monitor.add_images", { defaultValue: "Add images" })}
+            </span>
+          </button>
+        </div>
+
+        {/* Auto refresh checkbox — when folders exist */}
+        {folders.length > 0 && (
+          <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-ds-text-dim transition hover:text-ds-text">
             <input
               type="checkbox"
               checked={autoRefresh}
