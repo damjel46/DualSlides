@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible, updateSlideshowSettings } from "../lib/commands";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { load } from "@tauri-apps/plugin-store";
+import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible } from "../lib/commands";
 import { useMonitorConfig, syncIntervalFromMonitor } from "../hooks/useMonitorConfig";
 import type {
   MonitorInfo,
@@ -13,6 +15,31 @@ import type {
 } from "../lib/commands";
 
 const MAX_INTERVAL = 86400;
+
+// ── Profile types ───────────────────────────────────────────────────
+interface Profile {
+  id: string;
+  name: string;
+  thumbnail: string | null; // user-chosen representative image path
+  monitors: Record<string, {
+    folders: string[];
+    selectedFiles: string[];
+    interval: number;
+    mode: "Sequential" | "Shuffle";
+  }>;
+}
+
+const PROFILES_STORE_KEY = "profiles";
+
+async function loadProfiles(): Promise<Profile[]> {
+  const store = await load("profiles.json", { autoSave: true, defaults: {} });
+  return (await store.get<Profile[]>(PROFILES_STORE_KEY)) || [];
+}
+
+async function saveProfiles(profiles: Profile[]): Promise<void> {
+  const store = await load("profiles.json", { autoSave: true, defaults: {} });
+  await store.set(PROFILES_STORE_KEY, profiles);
+}
 
 function SafeImage({
   src,
@@ -190,10 +217,10 @@ function ImageGrid({
                   alt={img.filename}
                   className={`pointer-events-none h-full min-w-16 w-auto rounded-lg transition-all duration-200 ${
                     !isChecked
-                      ? "opacity-30 grayscale ring-1 ring-white/5"
+                      ? "opacity-30 grayscale ring-1 ring-ds-border"
                       : isCurrent
-                        ? "ring-2 ring-indigo-500 hover:scale-110"
-                        : "opacity-80 ring-1 ring-white/5 group-hover:opacity-100 group-hover:scale-110"
+                        ? "ring-2 ring-ds-accent hover:scale-110"
+                        : "opacity-80 ring-1 ring-ds-border group-hover:opacity-100 group-hover:scale-110"
                   }`}
                 />
               </button>
@@ -275,9 +302,17 @@ interface MonitorCardProps {
     mode: SlideshowMode,
   ) => void;
   onStop: (monitorId: string) => void;
-  onNext: (monitorId: string) => void;
-  onPrev: (monitorId: string) => void;
   onRefresh: () => void;
+  layout?: "vertical" | "horizontal";
+  previewOpen?: boolean;
+  onPreviewToggle?: (open: boolean) => void;
+  profiles: Profile[];
+  activeProfileId: string | null;
+  onSaveProfile: () => void;
+  onLoadProfile: (id: string) => void;
+  onDeleteProfile: (id: string) => void;
+  onSetProfileThumbnail: (id: string, path: string) => void;
+  onRenameProfile: (id: string, name: string) => void;
 }
 
 const PRESETS = [
@@ -299,14 +334,48 @@ export function MonitorCard({
   onSyncToggle,
   onStartFiles,
   onStop,
-  onNext,
-  onPrev,
   onRefresh,
+  layout = "vertical",
+  previewOpen: previewOpenProp,
+  onPreviewToggle,
+  profiles,
+  activeProfileId,
+  onSaveProfile,
+  onLoadProfile,
+  onDeleteProfile,
+  onSetProfileThumbnail,
+  onRenameProfile,
 }: MonitorCardProps) {
   const { t } = useTranslation();
   const { config, update, loaded } = useMonitorConfig(monitor.id);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewOpenLocal, setPreviewOpenLocal] = useState(false);
+  const previewOpen = previewOpenProp ?? previewOpenLocal;
+  const previewRef = useRef<HTMLDivElement>(null);
   const [taskbarHidden, setTaskbarHidden] = useState(false);
+
+  // Resize window when preview opens/closes
+  const togglePreview = useCallback(async () => {
+    const win = getCurrentWindow();
+    const factor = await win.scaleFactor();
+    const size = await win.innerSize();
+    const logH = Math.round(size.height / factor);
+    const PREVIEW_HEIGHT = layout === "horizontal" ? 350 : 280;
+
+    if (!previewOpen) {
+      // Opening: grow window
+      await win.setSize(new LogicalSize(Math.round(size.width / factor), logH + PREVIEW_HEIGHT));
+    } else {
+      // Closing: shrink window, but not below min height
+      const minH = 700;
+      await win.setSize(new LogicalSize(Math.round(size.width / factor), Math.max(logH - PREVIEW_HEIGHT, minH)));
+    }
+    const next = !previewOpen;
+    if (onPreviewToggle) {
+      onPreviewToggle(next);
+    } else {
+      setPreviewOpenLocal(next);
+    }
+  }, [previewOpen, onPreviewToggle]);
 
   // Read initial taskbar visibility
   const monitorIndex = parseInt(monitor.id.replace("monitor_", ""), 10);
@@ -364,9 +433,8 @@ export function MonitorCard({
   );
 
   const handleApplySettings = () => {
-    updateSlideshowSettings(monitor.id, effectiveInterval, mode, currentPaths)
-      .then(() => onRefresh())
-      .catch((e) => console.error("Failed to apply settings:", e));
+    // Use onStartFiles which handles sync mode properly (restarts all monitors together)
+    onStartFiles(monitor.id, currentPaths, effectiveInterval, mode);
   };
 
   // Effective folders list: migrate from legacy single `folder` field
@@ -536,9 +604,7 @@ export function MonitorCard({
   if (!loaded) return null;
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#1a1a3e] to-[#16162e] shadow-xl shadow-black/30 overflow-hidden">
-      {/* Top accent bar */}
-      <div className={`h-px bg-gradient-to-r from-transparent ${isRunning ? "via-emerald-500" : "via-indigo-500"} to-transparent`} />
+    <div className="rounded-2xl border border-ds-border bg-ds-card overflow-hidden">
 
       <div className="p-5">
       {/* Header */}
@@ -561,7 +627,7 @@ export function MonitorCard({
       {/* Source selection */}
       <div className="mb-4 flex items-center gap-2">
         <div className="flex items-center gap-2 mr-2">
-          <div className="w-0.5 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-purple-500" />
+          <div className="w-0.5 h-4 rounded-full bg-ds-accent" />
           <span className="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">{t("monitor.source", { defaultValue: "Source" })}</span>
         </div>
       </div>
@@ -571,7 +637,7 @@ export function MonitorCard({
           <div className="space-y-1">
             {folders.map((f) => (
               <div key={f} className="flex items-center gap-2 rounded-xl border border-ds-accent/30 bg-ds-accent/5 px-3 py-2">
-                <svg className="h-4 w-4 shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-4 w-4 shrink-0 text-ds-accent-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
                 <span className="flex-1 truncate text-sm text-ds-text" title={f}>
@@ -588,8 +654,8 @@ export function MonitorCard({
               </div>
             ))}
             {selectedFiles.length > 0 && (
-              <div className="flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/5 px-3 py-2">
-                <svg className="h-4 w-4 shrink-0 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-2 rounded-xl border border-ds-accent/30 bg-ds-accent/5 px-3 py-2">
+                <svg className="h-4 w-4 shrink-0 text-ds-accent-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 <span className="flex-1 text-sm text-ds-text">
@@ -623,7 +689,7 @@ export function MonitorCard({
           </button>
           <button
             onClick={handleSelectFiles}
-            className="flex flex-1 items-center gap-2 rounded-xl border border-dashed border-ds-border px-3 py-2.5 text-left text-sm transition hover:border-ds-accent/50 hover:bg-purple-500/5"
+            className="flex flex-1 items-center gap-2 rounded-xl border border-dashed border-ds-border px-3 py-2.5 text-left text-sm transition hover:border-ds-accent/50 hover:bg-ds-accent/5"
           >
             <svg className="h-4 w-4 shrink-0 text-ds-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
@@ -653,7 +719,7 @@ export function MonitorCard({
         <div className="mb-4">
           {/* Toggle bar */}
           <button
-            onClick={() => setPreviewOpen(!previewOpen)}
+            onClick={togglePreview}
             className="mb-2 flex w-full items-center gap-2 text-xs text-ds-text-dim transition hover:text-ds-text"
           >
             <svg
@@ -704,6 +770,7 @@ export function MonitorCard({
                   )}
                 </div>
 
+                <div className="max-h-[270px] overflow-y-auto rounded-lg">
                 <ImageGrid
                   images={images}
                   excluded={excluded}
@@ -714,6 +781,7 @@ export function MonitorCard({
                   onReorder={setImages}
                   filterFavorites={filterFavorites}
                 />
+                </div>
               </div>
             )}
         </div>
@@ -723,13 +791,13 @@ export function MonitorCard({
       <div className="mb-4 space-y-3">
         {/* Section header */}
         <div className="flex items-center gap-2">
-          <div className="w-0.5 h-4 rounded-full bg-gradient-to-b from-indigo-500 to-purple-500" />
+          <div className="w-0.5 h-4 rounded-full bg-ds-accent" />
           <span className="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">{t("monitor.interval")}</span>
         </div>
 
         {/* Interval segmented control */}
         <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-0.5 rounded-xl bg-black/30 p-1">
+        <div className="flex items-center gap-0.5 rounded-xl bg-ds-bg/50 p-1">
           {PRESETS.map((p) => {
             const isActive = !useCustom && interval === p.value;
             return (
@@ -738,8 +806,8 @@ export function MonitorCard({
                 onClick={() => handlePresetChange(String(p.value))}
                 className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
-                    : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
+                    ? "bg-ds-accent text-white"
+                    : "text-ds-text-muted hover:text-ds-text hover:bg-ds-card-hover"
                 }`}
               >
                 {t(`interval.${p.key}`)}
@@ -750,8 +818,8 @@ export function MonitorCard({
             onClick={() => handlePresetChange("custom")}
             className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
               useCustom
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
-                : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
+                ? "bg-ds-accent text-white"
+                : "text-ds-text-muted hover:text-ds-text hover:bg-ds-card-hover"
             }`}
           >
             {t("interval.custom")}
@@ -767,7 +835,7 @@ export function MonitorCard({
                 onChange={(e) => update({ customInput: e.target.value })}
                 onBlur={handleCustomBlur}
                 onKeyDown={(e) => e.key === "Enter" && handleCustomBlur()}
-                className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-center text-xs text-ds-text"
+                className="w-16 rounded-lg border border-ds-border bg-ds-bg/50 px-2 py-1.5 text-center text-xs text-ds-text [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 placeholder="sec"
               />
               <span className="text-[10px] text-ds-text-muted">{t("interval.seconds")}</span>
@@ -799,13 +867,13 @@ export function MonitorCard({
 
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-ds-text-muted">{t("monitor.mode")}</span>
-          <div className="flex rounded-lg overflow-hidden bg-black/30">
+          <div className="flex rounded-lg overflow-hidden bg-ds-bg/50">
             <button
               onClick={() => update({ mode: "Sequential" })}
               className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
                 mode === "Sequential"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
-                  : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
+                  ? "bg-ds-accent text-white"
+                  : "text-ds-text-muted hover:text-ds-text hover:bg-ds-card-hover"
               }`}
             >
               {t("slideshow.sequential")}
@@ -814,8 +882,8 @@ export function MonitorCard({
               onClick={() => update({ mode: "Shuffle" })}
               className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
                 mode === "Shuffle"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30"
-                  : "text-ds-text-muted hover:text-ds-text hover:bg-white/5"
+                  ? "bg-ds-accent text-white"
+                  : "text-ds-text-muted hover:text-ds-text hover:bg-ds-card-hover"
               }`}
             >
               {t("slideshow.shuffle")}
@@ -829,7 +897,7 @@ export function MonitorCard({
             className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
               settingsChanged
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
-                : "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
+                : "border-ds-border bg-ds-card text-ds-text-muted cursor-not-allowed opacity-50"
             }`}
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -841,35 +909,46 @@ export function MonitorCard({
         </div>
       </div>
 
-      {/* Playback controls */}
-      <div className="mb-3 flex items-center justify-center gap-3 rounded-2xl bg-black/20 py-3 px-4">
-        {/* Pin button */}
-        <button
-          onClick={onTogglePin}
-          disabled={!isRunning}
-          className={`flex h-10 w-10 items-center justify-center rounded-full transition disabled:opacity-30 ${
-            pinned
-              ? "bg-indigo-500/20 text-indigo-400"
-              : "text-ds-text-dim hover:bg-white/10 hover:text-ds-text"
-          }`}
-          title={t("pin.toggle")}
-        >
-          <svg className="h-4 w-4" fill={pinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-          </svg>
-        </button>
+      {/* Playback controls with profiles */}
+      <div className="mb-3 flex items-center gap-2 rounded-2xl bg-ds-bg/50 py-3 px-3">
+        {/* Left 3 profile slots */}
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map((i) => {
+            const prof = profiles[i];
+            return prof ? (
+              <button
+                key={prof.id}
+                onClick={() => onLoadProfile(prof.id)}
+                onContextMenu={(e) => { e.preventDefault(); onDeleteProfile(prof.id); }}
+                className={`relative flex h-10 w-14 items-center justify-center overflow-hidden rounded-lg border transition active:scale-90 ${
+                  activeProfileId === prof.id
+                    ? "border-ds-accent bg-ds-accent/10"
+                    : "border-ds-border bg-ds-card hover:border-ds-accent/30"
+                }`}
+                title={`${prof.name} (right-click to delete)`}
+              >
+                {prof.thumbnail ? (
+                  <img src={convertFileSrc(prof.thumbnail)} className="absolute inset-0 h-full w-full object-cover opacity-30" alt="" />
+                ) : null}
+                <span className="relative z-10 truncate px-0.5 text-[9px] font-medium text-ds-text">{prof.name}</span>
+              </button>
+            ) : (
+              <button
+                key={`add-l-${i}`}
+                onClick={onSaveProfile}
+                className="flex h-10 w-14 items-center justify-center rounded-lg border border-dashed border-ds-border/30 text-ds-text-muted/30 transition hover:border-ds-accent/20 hover:text-ds-accent-light/50 active:scale-90"
+                title={t("profile.save", { defaultValue: "Save current as profile" })}
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            );
+          })}
+        </div>
 
-        <button
-          onClick={() => onPrev(monitor.id)}
-          disabled={!status}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ds-text-dim transition hover:bg-white/10 hover:text-ds-text disabled:opacity-30"
-          title={t("slideshow.prev")}
-        >
-          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M15.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414zm-6 0a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L5.414 10l4.293 4.293a1 1 0 010 1.414z" />
-          </svg>
-        </button>
-
+        {/* Center play/pause */}
+        <div className="flex-1 flex justify-center">
         <AnimatePresence mode="wait">
           {isRunning ? (
             <motion.button
@@ -893,7 +972,7 @@ export function MonitorCard({
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={handlePlay}
               disabled={!hasImages}
-              className="flex h-12 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-sm font-medium text-white shadow-lg shadow-indigo-500/25 transition hover:shadow-indigo-500/40 hover:brightness-110 disabled:opacity-30 disabled:shadow-none"
+              className="flex h-12 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-ds-accent text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-30"
             >
               <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
@@ -902,17 +981,43 @@ export function MonitorCard({
             </motion.button>
           )}
         </AnimatePresence>
+        </div>
 
-        <button
-          onClick={() => onNext(monitor.id)}
-          disabled={!status}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ds-text-dim transition hover:bg-white/10 hover:text-ds-text disabled:opacity-30"
-          title={t("slideshow.next")}
-        >
-          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M4.293 15.707a1 1 0 010-1.414L8.586 10 4.293 5.707a1 1 0 011.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0zm6 0a1 1 0 010-1.414L14.586 10l-4.293-4.293a1 1 0 011.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0z" />
-          </svg>
-        </button>
+        {/* Right 3 profile slots */}
+        <div className="flex gap-1.5">
+          {[3, 4, 5].map((i) => {
+            const prof = profiles[i];
+            return prof ? (
+              <button
+                key={prof.id}
+                onClick={() => onLoadProfile(prof.id)}
+                onContextMenu={(e) => { e.preventDefault(); onDeleteProfile(prof.id); }}
+                className={`relative flex h-10 w-14 items-center justify-center overflow-hidden rounded-lg border transition active:scale-90 ${
+                  activeProfileId === prof.id
+                    ? "border-ds-accent bg-ds-accent/10"
+                    : "border-ds-border bg-ds-card hover:border-ds-accent/30"
+                }`}
+                title={`${prof.name} (right-click to delete)`}
+              >
+                {prof.thumbnail ? (
+                  <img src={convertFileSrc(prof.thumbnail)} className="absolute inset-0 h-full w-full object-cover opacity-30" alt="" />
+                ) : null}
+                <span className="relative z-10 truncate px-0.5 text-[9px] font-medium text-ds-text">{prof.name}</span>
+              </button>
+            ) : (
+              <button
+                key={`add-r-${i}`}
+                onClick={onSaveProfile}
+                className="flex h-10 w-14 items-center justify-center rounded-lg border border-dashed border-ds-border/30 text-ds-text-muted/30 transition hover:border-ds-accent/20 hover:text-ds-accent-light/50 active:scale-90"
+                title={t("profile.save", { defaultValue: "Save current as profile" })}
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Status bar */}
@@ -923,7 +1028,7 @@ export function MonitorCard({
               {status.current_index + 1} / {status.total_images}
             </span>
             {pinned && (
-              <span className="rounded-md bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-medium text-indigo-400">
+              <span className="rounded-md bg-ds-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-ds-accent-light">
                 {t("pin.pinned")}
               </span>
             )}

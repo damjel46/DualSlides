@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -38,6 +38,7 @@ interface MonitorLayoutProps {
   onSelect: (index: number) => void;
   zenActive: boolean;
   onToggleZen: () => void;
+  layout?: "vertical" | "horizontal";
 }
 
 export function MonitorLayout({
@@ -47,8 +48,24 @@ export function MonitorLayout({
   onSelect,
   zenActive,
   onToggleZen,
+  layout = "vertical",
 }: MonitorLayoutProps) {
   const { t } = useTranslation();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Measure container width and update on resize
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const measure = () => setContainerWidth(el.clientWidth);
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   if (monitors.length === 0) return null;
 
@@ -59,19 +76,30 @@ export function MonitorLayout({
 
   const totalW = maxX - minX || 1;
   const totalH = maxY - minY || 1;
-  const scale = Math.min(560 / totalW, 280 / totalH);
-  const shrink = 0.94; // shrink each monitor to create visual gaps
+  const padding = 20;
+
+  // Calculate scale based on available container width (minus padding)
+  // For vertical layout, cap at 560px wide; for horizontal, use actual container width
+  const availW = containerWidth > 0
+    ? containerWidth - padding * 2
+    : (layout === "horizontal" ? 400 : 560);
+  const maxH = layout === "horizontal" ? 300 : 280;
+  const scale = Math.min(availW / totalW, maxH / totalH);
+  const shrink = 0.94;
+
+  const diagramW = totalW * scale + padding * 2;
+  const diagramH = totalH * scale + padding * 2;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" ref={containerRef}>
       {/* Zen Mode toggle */}
       <div className="flex justify-end px-1">
         <button
           onClick={onToggleZen}
           className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
             zenActive
-              ? "bg-purple-600/20 text-purple-300 border border-purple-500/30 shadow-[0_0_12px_rgba(168,85,247,0.25)]"
-              : "bg-white/5 text-ds-text-muted border border-white/[0.08] hover:bg-white/10 hover:text-ds-text"
+              ? "bg-ds-accent/15 text-ds-accent-light border border-ds-accent/30"
+              : "bg-ds-card text-ds-text-muted border border-ds-border hover:bg-ds-card-hover hover:text-ds-text"
           }`}
           title={t("zen.description")}
         >
@@ -92,10 +120,11 @@ export function MonitorLayout({
 
       <div className="flex justify-center">
       <div
-        className="relative rounded-2xl bg-[#0d0d1f] border border-white/5 p-5 shadow-inner shadow-black/40"
+        className="relative rounded-2xl bg-ds-bg border border-ds-border overflow-hidden"
         style={{
-          width: totalW * scale + 40,
-          height: totalH * scale + 40,
+          width: diagramW,
+          height: diagramH,
+          padding,
         }}
       >
         {monitors.map((monitor, i) => {
@@ -115,12 +144,12 @@ export function MonitorLayout({
               transition={{ delay: i * 0.08, duration: 0.25 }}
               className={`absolute overflow-hidden rounded-xl transition-all duration-200 ${
                 isSelected
-                  ? "border-2 border-transparent shadow-[0_0_0_2px_#6366f1,0_0_20px_rgba(99,102,241,0.3)] -translate-y-1"
-                  : "border border-white/[0.08] hover:-translate-y-0.5 hover:border-white/[0.15] hover:shadow-lg"
+                  ? "ring-2 ring-ds-accent -translate-y-1"
+                  : "border border-ds-border hover:-translate-y-0.5 hover:border-ds-text-muted hover:shadow-lg"
               }`}
               style={{
-                left: (monitor.x - minX) * scale + 20 + (monitor.width * scale * (1 - shrink)) / 2,
-                top: (monitor.y - minY) * scale + 20 + (monitor.height * scale * (1 - shrink)) / 2,
+                left: (monitor.x - minX) * scale + padding + (monitor.width * scale * (1 - shrink)) / 2,
+                top: (monitor.y - minY) * scale + padding + (monitor.height * scale * (1 - shrink)) / 2,
                 width: monitor.width * scale * shrink,
                 height: monitor.height * scale * shrink,
               }}
@@ -128,10 +157,10 @@ export function MonitorLayout({
               {/* Crossfade background thumbnail */}
               <CrossfadeThumb src={thumbSrc} />
               {!thumbSrc && (
-                <div className={`absolute inset-0 ${isSelected ? "bg-gradient-to-br from-indigo-900/40 to-purple-900/30" : "bg-ds-card"}`} />
+                <div className={`absolute inset-0 ${isSelected ? "bg-ds-card" : "bg-ds-card"}`} />
               )}
               {thumbSrc && isSelected && (
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-purple-600/10" />
+                <div className="absolute inset-0 bg-ds-accent/5" />
               )}
 
               {/* Overlay content */}
@@ -153,7 +182,7 @@ export function MonitorLayout({
                   {status && (
                     <span className={`inline-block h-1.5 w-1.5 rounded-full ${
                       isRunning
-                        ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]"
+                        ? "bg-emerald-400"
                         : "bg-slate-500"
                     }`} />
                   )}

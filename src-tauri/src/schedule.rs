@@ -9,6 +9,7 @@ use tokio_util::sync::CancellationToken;
 pub struct ScheduleSlot {
     pub name: String,
     pub start_time: String, // "HH:MM" 24h format
+    pub end_time: String,   // "HH:MM" 24h format
     /// Optional profile ID for future integration
     pub profile_id: Option<String>,
     /// Direct folder mapping: monitor_id → vec of folder paths
@@ -29,12 +30,14 @@ impl Default for Schedule {
                 ScheduleSlot {
                     name: "Day".into(),
                     start_time: "06:00".into(),
+                    end_time: "18:00".into(),
                     profile_id: None,
                     folders: HashMap::new(),
                 },
                 ScheduleSlot {
                     name: "Night".into(),
                     start_time: "18:00".into(),
+                    end_time: "06:00".into(),
                     profile_id: None,
                     folders: HashMap::new(),
                 },
@@ -91,33 +94,35 @@ impl ScheduleEngine {
         idx.and_then(|i| schedule.slots.get(i).map(|s| s.name.clone()))
     }
 
-    /// Find which slot should be active for the given time (HH:MM).
-    /// Slots are sorted by start_time. The active slot is the last one
-    /// whose start_time <= current_time. If current_time is before all
-    /// slots, wrap to the last slot (overnight).
+    /// Find which slot is active for the given time (HH:MM).
+    /// Each slot has start_time and end_time. Supports overnight ranges
+    /// (e.g. start=22:00, end=06:00 means 22:00→next day 06:00).
     fn find_active_slot(slots: &[ScheduleSlot], now_hhmm: &str) -> Option<usize> {
         if slots.is_empty() {
             return None;
         }
 
-        // Sort indices by start_time
-        let mut indices: Vec<usize> = (0..slots.len()).collect();
-        indices.sort_by(|a, b| slots[*a].start_time.cmp(&slots[*b].start_time));
+        for (i, slot) in slots.iter().enumerate() {
+            let start = slot.start_time.as_str();
+            let end = slot.end_time.as_str();
 
-        // Find last slot whose start_time <= now
-        let mut active = None;
-        for &i in &indices {
-            if slots[i].start_time.as_str() <= now_hhmm {
-                active = Some(i);
+            if start == end {
+                // 24h slot (same start/end = always active)
+                return Some(i);
+            } else if start < end {
+                // Normal range: e.g. 06:00 ~ 18:00
+                if now_hhmm >= start && now_hhmm < end {
+                    return Some(i);
+                }
+            } else {
+                // Overnight range: e.g. 18:00 ~ 06:00
+                if now_hhmm >= start || now_hhmm < end {
+                    return Some(i);
+                }
             }
         }
 
-        // If none found (current time is before all slots), use the last slot (wrap from previous day)
-        if active.is_none() {
-            active = indices.last().copied();
-        }
-
-        active
+        None
     }
 
     /// Start the schedule check timer. Checks every 30 seconds.

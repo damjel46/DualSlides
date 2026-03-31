@@ -24,6 +24,25 @@ pub struct ImageInfo {
 
 const SUPPORTED_EXTS: &[&str] = &["jpg", "jpeg", "png", "bmp", "webp"];
 
+// ── Cached Tauri monitor info for index mapping ─────────────────────
+static TAURI_MONITORS: Mutex<Vec<MonitorInfo>> = Mutex::new(Vec::new());
+
+pub fn cache_tauri_monitors(monitors: &[MonitorInfo]) {
+    let mut cached = TAURI_MONITORS.lock().unwrap();
+    *cached = monitors.to_vec();
+    // Clear IDesktopWallpaper mapping so it rebuilds with new info
+    #[cfg(target_os = "windows")]
+    {
+        // Can't call win::clear_mapping() here due to thread_local,
+        // it will rebuild on next set_wallpaper call from that thread
+    }
+    log::info!("Cached {} Tauri monitors for index mapping", monitors.len());
+}
+
+fn get_cached_monitors() -> Vec<MonitorInfo> {
+    TAURI_MONITORS.lock().unwrap().clone()
+}
+
 // ── BMP cache ────────────────────────────────────────────────────────
 // Pre-converts images to BMP so Windows doesn't need to decode jpg/png/webp
 // on each SetWallpaper call. Cached in temp dir, keyed by source path + mtime.
@@ -144,6 +163,7 @@ pub fn get_all_monitors(app: &tauri::AppHandle) -> Vec<MonitorInfo> {
         .collect();
 
     log::info!("Detected {} monitor(s)", monitors.len());
+    cache_tauri_monitors(&monitors);
     monitors
 }
 
@@ -152,20 +172,30 @@ pub fn get_all_monitors(app: &tauri::AppHandle) -> Vec<MonitorInfo> {
 #[cfg(target_os = "windows")]
 mod win {
     use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::sync::Mutex as StdMutex;
     use windows::{
         core::HSTRING,
+        Win32::Foundation::RECT,
         Win32::System::Com::{
             CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
         },
         Win32::UI::Shell::{DesktopWallpaper, IDesktopWallpaper},
+        Win32::UI::WindowsAndMessaging::{
+            SystemParametersInfoW, ANIMATIONINFO,
+            SPI_GETANIMATION, SPI_SETANIMATION,
+            SPIF_SENDCHANGE,
+        },
     };
 
     thread_local! {
         static DW_CACHE: RefCell<Option<IDesktopWallpaper>> = const { RefCell::new(None) };
-        static PATHS_CACHE: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-        // Track current wallpaper per monitor to skip redundant SetWallpaper calls
-        static CURRENT_WP: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+        /// Maps Tauri monitor index → IDesktopWallpaper device path (thread-local cache)
+        static INDEX_TO_PATH: RefCell<Option<HashMap<usize, String>>> = const { RefCell::new(None) };
     }
+
+    /// Global wallpaper tracker — shared across all threads to prevent skip on wrap-around
+    static CURRENT_WP: StdMutex<Option<HashMap<usize, String>>> = StdMutex::new(None);
 
     fn get_desktop_wallpaper() -> Result<IDesktopWallpaper, String> {
         DW_CACHE.with(|cell| {
@@ -184,85 +214,163 @@ mod win {
         })
     }
 
-    fn ensure_paths() -> Result<(), String> {
-        PATHS_CACHE.with(|cell| {
-            let paths = cell.borrow();
-            if !paths.is_empty() {
+    /// Ensure system animations are enabled so DWM crossfade plays.
+    /// Called once at startup.
+    pub fn init_transitions() {
+        unsafe {
+            let mut anim = ANIMATIONINFO {
+                cbSize: std::mem::size_of::<ANIMATIONINFO>() as u32,
+                iMinAnimate: 0,
+            };
+            let _ = SystemParametersInfoW(
+                SPI_GETANIMATION,
+                anim.cbSize,
+                Some(&mut anim as *mut _ as *mut std::ffi::c_void),
+                Default::default(),
+            );
+            if anim.iMinAnimate == 0 {
+                anim.iMinAnimate = 1;
+                let _ = SystemParametersInfoW(
+                    SPI_SETANIMATION,
+                    anim.cbSize,
+                    Some(&mut anim as *mut _ as *mut std::ffi::c_void),
+                    SPIF_SENDCHANGE,
+                );
+                log::info!("Enabled system animations for wallpaper transitions");
+            }
+
+            // Initialize IDesktopWallpaper and enable it
+            match get_desktop_wallpaper() {
+                Ok(dw) => {
+                    let _ = dw.Enable(true);
+                    log::info!("IDesktopWallpaper enabled for transitions");
+                }
+                Err(e) => log::warn!("Could not init IDesktopWallpaper: {}", e),
+            }
+        }
+    }
+
+    /// Build mapping from Tauri monitor index to IDesktopWallpaper device path
+    /// by matching monitor positions (x, y) from both APIs.
+    fn ensure_mapping(tauri_monitors: &[super::MonitorInfo]) -> Result<(), String> {
+        INDEX_TO_PATH.with(|cell| {
+            if cell.borrow().is_some() {
                 return Ok(());
             }
-            drop(paths);
-            let fresh = load_monitor_paths()?;
-            let count = fresh.len();
-            *cell.borrow_mut() = fresh;
-            // Initialize current wallpaper tracker
-            CURRENT_WP.with(|wp| {
-                let mut w = wp.borrow_mut();
-                if w.len() < count {
-                    w.resize(count, String::new());
+
+            unsafe {
+                let dw = get_desktop_wallpaper()?;
+                let count = dw
+                    .GetMonitorDevicePathCount()
+                    .map_err(|e| format!("GetMonitorDevicePathCount: {}", e))?;
+
+                let mut dw_monitors: Vec<(String, RECT)> = Vec::new();
+                for i in 0..count {
+                    let path = match dw.GetMonitorDevicePathAt(i) {
+                        Ok(p) => p.to_string().unwrap_or_default(),
+                        Err(_) => continue,
+                    };
+                    if path.is_empty() { continue; }
+                    let rect = match dw.GetMonitorRECT(&HSTRING::from(&path)) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            log::warn!("GetMonitorRECT failed for {}: {}", path, e);
+                            continue;
+                        }
+                    };
+                    dw_monitors.push((path, rect));
                 }
-            });
+
+                let mut mapping = HashMap::new();
+                for (tauri_idx, tm) in tauri_monitors.iter().enumerate() {
+                    let mut best_match: Option<(usize, i32)> = None;
+                    for (dw_idx, (_, rect)) in dw_monitors.iter().enumerate() {
+                        let dx = (rect.left - tm.x).abs();
+                        let dy = (rect.top - tm.y).abs();
+                        let dist = dx + dy;
+                        if best_match.is_none() || dist < best_match.unwrap().1 {
+                            best_match = Some((dw_idx, dist));
+                        }
+                    }
+                    if let Some((dw_idx, dist)) = best_match {
+                        if dist < 50 {
+                            let path = dw_monitors[dw_idx].0.clone();
+                            log::info!(
+                                "Monitor mapping: tauri[{}] ({},{}) → DW path ...{}",
+                                tauri_idx, tm.x, tm.y,
+                                &path[path.len().saturating_sub(20)..]
+                            );
+                            mapping.insert(tauri_idx, path);
+                        }
+                    }
+                }
+
+                if mapping.is_empty() {
+                    log::warn!("Position matching failed, falling back to index order");
+                    for (i, (path, _)) in dw_monitors.iter().enumerate() {
+                        mapping.insert(i, path.clone());
+                    }
+                }
+
+                *cell.borrow_mut() = Some(mapping);
+            }
             Ok(())
         })
     }
 
-    fn load_monitor_paths() -> Result<Vec<String>, String> {
-        unsafe {
-            let dw = get_desktop_wallpaper()?;
-            let count = dw
-                .GetMonitorDevicePathCount()
-                .map_err(|e| format!("GetMonitorDevicePathCount: {}", e))?;
-            let mut paths = Vec::with_capacity(count as usize);
-            for i in 0..count {
-                match dw.GetMonitorDevicePathAt(i) {
-                    Ok(p) => paths.push(p.to_string().unwrap_or_default()),
-                    Err(e) => {
-                        log::warn!("GetMonitorDevicePathAt({}): {}", i, e);
-                        paths.push(String::new());
-                    }
+    pub fn set_wallpaper_by_index(
+        monitor_index: usize,
+        bmp_path: &str,
+        tauri_monitors: &[super::MonitorInfo],
+    ) -> Result<(), String> {
+        ensure_mapping(tauri_monitors)?;
+
+        // Skip if same wallpaper is already set (global tracker, not thread-local)
+        {
+            let guard = CURRENT_WP.lock().unwrap();
+            if let Some(ref map) = *guard {
+                if map.get(&monitor_index).map(|s| s == bmp_path).unwrap_or(false) {
+                    return Ok(());
                 }
             }
-            Ok(paths)
-        }
-    }
-
-    pub fn set_wallpaper_by_index(monitor_index: usize, bmp_path: &str) -> Result<(), String> {
-        ensure_paths()?;
-
-        // Skip if same wallpaper is already set
-        let is_same = CURRENT_WP.with(|wp| {
-            let w = wp.borrow();
-            w.get(monitor_index).map(|s| s == bmp_path).unwrap_or(false)
-        });
-        if is_same {
-            return Ok(());
         }
 
-        PATHS_CACHE.with(|cell| {
-            let paths = cell.borrow();
-            if monitor_index >= paths.len() {
-                return Err(format!(
-                    "Monitor index {} out of range (found {} monitor(s))",
+        INDEX_TO_PATH.with(|cell| {
+            let opt = cell.borrow();
+            let map = opt.as_ref().ok_or_else(|| "Monitor mapping not initialized".to_string())?;
+            let device_path = map.get(&monitor_index).ok_or_else(|| {
+                format!(
+                    "No device path mapping for monitor index {} (have {} mappings)",
                     monitor_index,
-                    paths.len()
-                ));
-            }
+                    map.len()
+                )
+            })?;
+
             unsafe {
                 let dw = get_desktop_wallpaper()?;
-                let monitor_id = HSTRING::from(&paths[monitor_index]);
+                let monitor_id = HSTRING::from(device_path.as_str());
                 let wallpaper = HSTRING::from(bmp_path);
                 dw.SetWallpaper(&monitor_id, &wallpaper)
                     .map_err(|e| format!("SetWallpaper failed: {}", e))?;
             }
-            // Update tracker
-            CURRENT_WP.with(|wp| {
-                let mut w = wp.borrow_mut();
-                if monitor_index < w.len() {
-                    w[monitor_index] = bmp_path.to_string();
-                }
-            });
+
+            // Update global tracker
+            {
+                let mut guard = CURRENT_WP.lock().unwrap();
+                let map = guard.get_or_insert_with(HashMap::new);
+                map.insert(monitor_index, bmp_path.to_string());
+            }
+
             Ok(())
         })
     }
+}
+
+/// Initialize wallpaper transition system (DWM crossfade).
+/// Call once at app startup.
+#[cfg(target_os = "windows")]
+pub fn init_transitions() {
+    win::init_transitions();
 }
 
 // ── Cross-platform set_wallpaper ─────────────────────────────────────
@@ -301,7 +409,8 @@ pub fn set_wallpaper(monitor_id: &str, image_path: &str) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        win::set_wallpaper_by_index(target_index, &bmp_path)?;
+        let cached = get_cached_monitors();
+        win::set_wallpaper_by_index(target_index, &bmp_path, &cached)?;
     }
 
     #[cfg(not(target_os = "windows"))]

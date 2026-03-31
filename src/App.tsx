@@ -7,10 +7,12 @@ import { MonitorCard } from "./components/MonitorCard";
 import { MonitorLayout } from "./components/MonitorLayout";
 import { Settings } from "./components/Settings";
 import type { SettingsTab } from "./components/Settings";
+import { ScheduleModal } from "./components/ScheduleModal";
 import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncIntervalFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
+import { useTheme } from "./hooks/useTheme";
 import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
@@ -24,12 +26,125 @@ function App() {
   } = useSlideshow();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
+
+  // Auto-select primary monitor on first load
+  useEffect(() => {
+    if (monitors.length > 0 && selectedMonitor === null) {
+      const primaryIdx = monitors.findIndex((m) => m.is_primary);
+      setSelectedMonitor(primaryIdx >= 0 ? primaryIdx : 0);
+    }
+  }, [monitors]);
   const { syncEnabled, setSync } = useAppConfig();
   const [hasStoredConfigs, setHasStoredConfigs] = useState(false);
   const [zenActive, setZenActive] = useState(false);
   const [allPinned, setAllPinned] = useState(false);
-  const [layout, setLayout] = useState<"vertical" | "horizontal">("vertical");
+  const [layout, setLayout] = useState<"vertical" | "horizontal">("horizontal");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const { theme, toggleTheme, accentId, setAccent } = useTheme();
+
+  // ── Profiles ───────────────────────────────────────────────────────
+  interface Profile {
+    id: string;
+    name: string;
+    thumbnail: string | null;
+    monitors: Record<string, {
+      folders: string[];
+      selectedFiles: string[];
+      interval: number;
+      mode: "Sequential" | "Shuffle";
+    }>;
+  }
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    load("profiles.json", { autoSave: true, defaults: {} }).then(async (store) => {
+      const saved = await store.get<Profile[]>("profiles");
+      if (saved) setProfiles(saved);
+      const activeId = await store.get<string>("activeProfileId");
+      if (activeId) setActiveProfileId(activeId);
+    }).catch(() => {});
+  }, []);
+
+  const persistProfiles = async (p: Profile[], activeId: string | null) => {
+    const store = await load("profiles.json", { autoSave: true, defaults: {} });
+    await store.set("profiles", p);
+    await store.set("activeProfileId", activeId);
+  };
+
+  const handleSaveProfile = async () => {
+    if (profiles.length >= 6) return;
+    const allConfigs = await getAllMonitorConfigs();
+    const monitorsData: Record<string, { folders: string[]; selectedFiles: string[]; interval: number; mode: "Sequential" | "Shuffle" }> = {};
+    for (const [mid, cfg] of Object.entries(allConfigs)) {
+      const folders = cfg.folders && cfg.folders.length > 0 ? cfg.folders : cfg.folder ? [cfg.folder] : [];
+      monitorsData[mid] = {
+        folders,
+        selectedFiles: cfg.selectedFiles || [],
+        interval: cfg.interval,
+        mode: cfg.mode,
+      };
+    }
+    // Find a representative thumbnail from first monitor's first image
+    let thumbnail: string | null = null;
+    const firstCfg = Object.values(allConfigs)[0];
+    if (firstCfg?.images?.length > 0) {
+      thumbnail = firstCfg.images[0].path;
+    }
+    const newProfile: Profile = {
+      id: Date.now().toString(36),
+      name: `Profile ${profiles.length + 1}`,
+      thumbnail,
+      monitors: monitorsData,
+    };
+    const updated = [...profiles, newProfile];
+    setProfiles(updated);
+    setActiveProfileId(newProfile.id);
+    await persistProfiles(updated, newProfile.id);
+  };
+
+  const handleLoadProfile = async (id: string) => {
+    const prof = profiles.find((p) => p.id === id);
+    if (!prof) return;
+    // Apply each monitor's config to the store
+    const store = await load("monitor-configs.json", { autoSave: true, defaults: {} });
+    for (const [mid, cfg] of Object.entries(prof.monitors)) {
+      const existing = await store.get<Record<string, unknown>>(mid) || {};
+      await store.set(mid, {
+        ...existing,
+        folders: cfg.folders,
+        selectedFiles: cfg.selectedFiles,
+        interval: cfg.interval,
+        mode: cfg.mode,
+      });
+    }
+    setActiveProfileId(id);
+    await persistProfiles(profiles, id);
+    // Restart slideshows with new config
+    await handleStartAll();
+  };
+
+  const handleDeleteProfile = async (id: string) => {
+    const updated = profiles.filter((p) => p.id !== id);
+    const newActiveId = activeProfileId === id ? null : activeProfileId;
+    setProfiles(updated);
+    setActiveProfileId(newActiveId);
+    await persistProfiles(updated, newActiveId);
+  };
+
+  const handleSetProfileThumbnail = async (id: string, path: string) => {
+    const updated = profiles.map((p) => p.id === id ? { ...p, thumbnail: path } : p);
+    setProfiles(updated);
+    await persistProfiles(updated, activeProfileId);
+  };
+
+  const handleRenameProfile = async (id: string, name: string) => {
+    const updated = profiles.map((p) => p.id === id ? { ...p, name } : p);
+    setProfiles(updated);
+    await persistProfiles(updated, activeProfileId);
+  };
 
   // Load saved layout preference
   useEffect(() => {
@@ -37,29 +152,56 @@ function App() {
       const saved = await store.get<string>("layout");
       if (saved === "vertical" || saved === "horizontal") {
         setLayout(saved);
-        applyLayoutSize(saved);
+        // On startup, force resize if saved layout differs from default (vertical)
+        await applyLayoutSize(saved, saved !== "horizontal");
       }
     }).catch(() => {});
   }, []);
 
-  const applyLayoutSize = async (mode: "vertical" | "horizontal") => {
+  const applyLayoutSize = async (mode: "vertical" | "horizontal", forceResize = false) => {
     const win = getCurrentWindow();
-    // min-w-[280px] (layout) + min-w-[380px] (card) + gap + padding ≈ 760
-    const minW = mode === "horizontal" ? 760 : 600;
-    const minH = mode === "horizontal" ? 500 : 700;
-    await win.setMinSize(new LogicalSize(minW, minH));
-    const size = await win.innerSize();
-    const newW = Math.max(size.width, minW);
-    const newH = Math.max(size.height, minH);
-    if (newW !== size.width || newH !== size.height) {
-      await win.setSize(new LogicalSize(newW, newH));
+    const factor = await win.scaleFactor();
+    if (mode === "horizontal") {
+      const minW = 1060;
+      const minH = 500;
+      const targetW = 1200;
+      const targetH = 700;
+      await win.setMinSize(new LogicalSize(minW, minH));
+      if (forceResize) {
+        await win.setSize(new LogicalSize(targetW, targetH));
+      } else {
+        // On startup: ensure current size meets minimum
+        const size = await win.innerSize();
+        const logW = Math.round(size.width / factor);
+        const logH = Math.round(size.height / factor);
+        if (logW < minW || logH < minH) {
+          await win.setSize(new LogicalSize(Math.max(logW, minW), Math.max(logH, minH)));
+        }
+      }
+    } else {
+      const minW = 600;
+      const minH = 700;
+      const targetW = 900;
+      const targetH = 1030;
+      await win.setMinSize(new LogicalSize(minW, minH));
+      if (forceResize) {
+        await win.setSize(new LogicalSize(targetW, targetH));
+      } else {
+        const size = await win.innerSize();
+        const logW = Math.round(size.width / factor);
+        const logH = Math.round(size.height / factor);
+        if (logW < minW || logH < minH) {
+          await win.setSize(new LogicalSize(Math.max(logW, minW), Math.max(logH, minH)));
+        }
+      }
     }
   };
 
   const toggleLayout = async () => {
     const next = layout === "vertical" ? "horizontal" : "vertical";
+    setPreviewOpen(false);
     setLayout(next);
-    await applyLayoutSize(next);
+    await applyLayoutSize(next, true);
     const store = await load("settings.json", { autoSave: true, defaults: {} });
     await store.set("layout", next);
   };
@@ -402,12 +544,6 @@ function App() {
   const handleHotkeyAction = useCallback(
     (action: string) => {
       switch (action) {
-        case "next_wallpaper":
-          nextWithSync(selectedMonitorId);
-          break;
-        case "prev_wallpaper":
-          prevWithSync(selectedMonitorId);
-          break;
         case "toggle_slideshow":
           if (statuses[selectedMonitorId]?.is_running) {
             stop(selectedMonitorId);
@@ -436,24 +572,12 @@ function App() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-ds-bg text-ds-text overflow-hidden">
-      {/* Ambient background orbs */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-600/8 blur-[120px]" />
-        <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-purple-600/8 blur-[120px]" />
-        <div className="absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500/5 blur-[100px]" />
-      </div>
-
-      {/* Grain noise overlay */}
-      <div className="pointer-events-none fixed inset-0 z-[9999] opacity-[0.025]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat' }} />
-
       {/* Header */}
-      <header className="relative z-10 shrink-0 bg-[#0f0f23]/80 backdrop-blur-xl border-b border-white/5">
-        {/* Top gradient accent line */}
-        <div className="h-px bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
+      <header className="relative z-10 shrink-0 bg-ds-card/80 backdrop-blur-xl border-b border-ds-border">
         <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-2.5">
           {/* Logo */}
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-ds-accent to-ds-accent-light shadow-lg shadow-indigo-500/20">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ds-accent">
             <svg
               className="h-4 w-4 text-white"
               fill="currentColor"
@@ -462,10 +586,10 @@ function App() {
               <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
             </svg>
           </div>
-          <h1 className="bg-gradient-to-r from-white via-indigo-300 to-purple-400 bg-clip-text text-base font-bold text-transparent">{t("app.name")}</h1>
+          <h1 className="text-ds-text text-base font-bold">{t("app.name")}</h1>
         </div>
 
-        <div className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/5 px-1 py-1">
+        <div className="flex items-center gap-1 rounded-full px-1 py-1">
           {/* Pause All / Resume All */}
           {anyRunning && (
             <motion.button
@@ -532,7 +656,7 @@ function App() {
           {/* Layout toggle */}
           <button
             onClick={toggleLayout}
-            className="rounded-full p-2 text-ds-text-muted transition hover:bg-white/10 hover:text-ds-text"
+            className="rounded-full p-2 text-ds-text-muted transition hover:bg-ds-card-hover hover:text-ds-text"
             title={layout === "vertical" ? t("app.layout_horizontal") : t("app.layout_vertical")}
           >
             {layout === "vertical" ? (
@@ -550,8 +674,8 @@ function App() {
 
           {/* Schedule shortcut */}
           <button
-            onClick={() => { setSettingsTab("schedule"); setSettingsOpen(true); }}
-            className="rounded-full p-2 text-ds-text-muted transition hover:bg-white/10 hover:text-ds-text"
+            onClick={() => setScheduleOpen(true)}
+            className="rounded-full p-2 text-ds-text-muted transition hover:bg-ds-card-hover hover:text-ds-text"
             title={t("schedule.title")}
           >
             <svg
@@ -572,7 +696,7 @@ function App() {
           {/* Settings gear */}
           <button
             onClick={() => { setSettingsTab("general"); setSettingsOpen(true); }}
-            className="rounded-full p-2 text-ds-text-muted transition hover:bg-white/10 hover:text-ds-text"
+            className="rounded-full p-2 text-ds-text-muted transition hover:bg-ds-card-hover hover:text-ds-text"
             title={t("app.settings")}
           >
             <svg
@@ -611,7 +735,7 @@ function App() {
 
           {/* Monitor layout diagram */}
           {!loading && monitors.length > 0 && (
-            <div className={layout === "horizontal" ? "w-2/5 min-w-[280px] shrink-0 sticky top-0" : ""}>
+            <div className={layout === "horizontal" ? "w-2/5 min-w-[280px] shrink-0 self-start" : ""}>
               <MonitorLayout
                 monitors={monitors}
                 statuses={statuses}
@@ -619,6 +743,7 @@ function App() {
                 onSelect={setSelectedMonitor}
                 zenActive={zenActive}
                 onToggleZen={handleToggleZen}
+                layout={layout}
               />
             </div>
           )}
@@ -635,9 +760,17 @@ function App() {
                 onSyncToggle={handleSyncToggle}
                 onStartFiles={startFilesWithSync}
                 onStop={stopWithSync}
-                onNext={nextWithSync}
-                onPrev={prevWithSync}
                 onRefresh={refresh}
+                layout={layout}
+                previewOpen={previewOpen}
+                onPreviewToggle={setPreviewOpen}
+                profiles={profiles}
+                activeProfileId={activeProfileId}
+                onSaveProfile={handleSaveProfile}
+                onLoadProfile={handleLoadProfile}
+                onDeleteProfile={handleDeleteProfile}
+                onSetProfileThumbnail={handleSetProfileThumbnail}
+                onRenameProfile={handleRenameProfile}
               />
             ) : (
               !loading &&
@@ -664,6 +797,17 @@ function App() {
         monitorIds={monitors.map((m) => m.id)}
         activeTab={settingsTab}
         onTabChange={setSettingsTab}
+        theme={theme}
+        onThemeChange={toggleTheme}
+        accentId={accentId}
+        onAccentChange={setAccent}
+      />
+
+      {/* Schedule modal */}
+      <ScheduleModal
+        open={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        monitorIds={monitors.map((m) => m.id)}
       />
     </div>
   );

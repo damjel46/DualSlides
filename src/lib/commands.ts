@@ -193,6 +193,7 @@ export async function isZenModeActive(): Promise<boolean> {
 export interface ScheduleSlot {
   name: string;
   start_time: string; // "HH:MM"
+  end_time: string; // "HH:MM"
   profile_id: string | null;
   folders: Record<string, string[]>; // monitor_id → folder paths
 }

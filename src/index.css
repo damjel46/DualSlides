@@ -1,21 +1,47 @@
 @import "tailwindcss";
 
+:root,
+[data-theme="dark"] {
+  --ds-bg: #0f1117;
+  --ds-card: #1a1d27;
+  --ds-card-hover: #222530;
+  --ds-border: #2a2d37;
+  --ds-accent: #0e7490;
+  --ds-accent-light: #0891b2;
+  --ds-text: #e4e4e7;
+  --ds-text-dim: #52525b;
+  --ds-text-muted: #71717a;
+}
+
+[data-theme="light"] {
+  --ds-bg: #f8fafc;
+  --ds-card: #ffffff;
+  --ds-card-hover: #f1f5f9;
+  --ds-border: #e2e8f0;
+  --ds-accent: #0891b2;
+  --ds-accent-light: #06b6d4;
+  --ds-text: #1e293b;
+  --ds-text-dim: #94a3b8;
+  --ds-text-muted: #64748b;
+}
+
 @theme {
-  --color-ds-bg: #0f0f23;
-  --color-ds-card: #1a1a3e;
-  --color-ds-card-hover: #22224a;
-  --color-ds-border: #2a2a52;
-  --color-ds-accent: #6366f1;
-  --color-ds-accent-light: #8b5cf6;
-  --color-ds-text: #e2e8f0;
-  --color-ds-text-dim: #94a3b8;
-  --color-ds-text-muted: #64748b;
+  --color-ds-bg: var(--ds-bg);
+  --color-ds-card: var(--ds-card);
+  --color-ds-card-hover: var(--ds-card-hover);
+  --color-ds-border: var(--ds-border);
+  --color-ds-accent: var(--ds-accent);
+  --color-ds-accent-light: var(--ds-accent-light);
+  --color-ds-text: var(--ds-text);
+  --color-ds-text-dim: var(--ds-text-dim);
+  --color-ds-text-muted: var(--ds-text-muted);
 }
 
 body {
   margin: 0;
-  background: var(--color-ds-bg);
+  background: var(--ds-bg);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-x: hidden;
 }
 
 #root {
@@ -30,14 +56,14 @@ body {
   background: transparent;
 }
 .thumb-scroll::-webkit-scrollbar-thumb {
-  background: var(--color-ds-border);
+  background: var(--ds-border);
   border-radius: 3px;
 }
 
 /* Global custom focus ring */
 *:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px #6366f1, 0 0 0 4px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 0 2px var(--ds-accent), 0 0 0 4px color-mix(in srgb, var(--ds-accent) 20%, transparent);
   border-radius: 8px;
 }
 
@@ -50,11 +76,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--ds-border);
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--ds-text-muted);
 }
 
 /* Button no-select */

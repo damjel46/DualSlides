@@ -619,12 +619,40 @@ impl SlideshowEngine {
                 for h in pre { let _ = h.await; }
             }
 
-            let mut ticker = time::interval(Duration::from_secs(interval_secs));
-            ticker.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+            // Apply wallpaper immediately at start (before first interval wait)
+            {
+                let pairs: Vec<(String, String)> = entries
+                    .iter()
+                    .filter(|(_, imgs)| !imgs.is_empty())
+                    .map(|(mid, imgs)| (mid.clone(), imgs[index % imgs.len()].clone()))
+                    .collect();
+
+                if !pairs.is_empty() {
+                    let _ = tokio::task::spawn_blocking(move || {
+                        for (mid, path) in &pairs {
+                            if let Err(e) = monitor::set_wallpaper(mid, path) {
+                                log::error!("[{}] initial set_wallpaper failed: {}", mid, e);
+                            }
+                        }
+                    }).await;
+                }
+
+                // Update state
+                {
+                    let mut map = monitors_state.lock().unwrap();
+                    for (mid, images) in &entries {
+                        if let Some(ms) = map.get_mut(mid.as_str()) {
+                            ms.current_index = index % images.len();
+                        }
+                    }
+                }
+                index += 1;
+            }
 
             loop {
+                // Wait for interval or cancel (no immediate first tick)
                 tokio::select! {
-                    _ = ticker.tick() => {}
+                    _ = time::sleep(Duration::from_secs(interval_secs)) => {}
                     _ = token.cancelled() => { break; }
                 }
                 if token.is_cancelled() { break; }
@@ -691,8 +719,14 @@ impl SlideshowEngine {
             let mut map = monitors_state.lock().unwrap();
             for (mid, _) in &entries {
                 if let Some(ms) = map.get_mut(mid.as_str()) {
-                    ms.is_running = false;
-                    ms.cancel_token = None;
+                    // Only mark stopped if our token is still the active one
+                    let is_our_token = ms.cancel_token.as_ref()
+                        .map(|t| t.is_cancelled())
+                        .unwrap_or(true);
+                    if is_our_token {
+                        ms.is_running = false;
+                        ms.cancel_token = None;
+                    }
                 }
             }
             log::info!("Synced timer stopped");
@@ -780,14 +814,39 @@ impl SlideshowEngine {
                 for h in pre_handles { let _ = h.await; }
             }
 
-            // Absolute-time interval — no drift
-            let mut ticker = time::interval(Duration::from_secs(interval_secs));
-            ticker.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+            // Apply wallpaper immediately at start
+            {
+                let pairs: Vec<(String, String)> = monitor_data
+                    .iter()
+                    .filter(|(_, imgs)| !imgs.is_empty())
+                    .map(|(mid, imgs)| (mid.clone(), imgs[index % imgs.len()].clone()))
+                    .collect();
+
+                if !pairs.is_empty() {
+                    let _ = tokio::task::spawn_blocking(move || {
+                        for (mid, path) in &pairs {
+                            if let Err(e) = monitor::set_wallpaper(mid, path) {
+                                log::error!("[{}] initial set_wallpaper failed: {}", mid, e);
+                            }
+                        }
+                    }).await;
+                }
+
+                {
+                    let mut map = monitors.lock().unwrap();
+                    for (mid, images) in &monitor_data {
+                        if let Some(ms) = map.get_mut(mid.as_str()) {
+                            ms.current_index = index % images.len();
+                        }
+                    }
+                }
+                index += 1;
+            }
 
             loop {
-                // Wait for tick or cancel
+                // Wait for interval or cancel
                 tokio::select! {
-                    _ = ticker.tick() => {}
+                    _ = time::sleep(Duration::from_secs(interval_secs)) => {}
                     _ = token.cancelled() => { break; }
                 }
 
@@ -858,12 +917,17 @@ impl SlideshowEngine {
                 index += 1;
             }
 
-            // Mark all stopped
+            // Mark all stopped — only if our token is still active
             let mut map = monitors.lock().unwrap();
             for (mid, _) in &monitor_data {
                 if let Some(ms) = map.get_mut(mid.as_str()) {
-                    ms.is_running = false;
-                    ms.cancel_token = None;
+                    let is_our_token = ms.cancel_token.as_ref()
+                        .map(|t| t.is_cancelled())
+                        .unwrap_or(true);
+                    if is_our_token {
+                        ms.is_running = false;
+                        ms.cancel_token = None;
+                    }
                 }
             }
             log::info!("Sync timer stopped");

@@ -51,6 +51,14 @@ pub fn run() {
             tray::build_tray(app.handle(), "en")
                 .map_err(|e| format!("Tray init failed: {}", e))?;
 
+            // Initialize wallpaper transition system (enable DWM crossfade)
+            #[cfg(target_os = "windows")]
+            {
+                std::thread::spawn(|| {
+                    monitor::init_transitions();
+                });
+            }
+
             // Handle --minimized flag (autostart scenario)
             let minimized = std::env::args().any(|a| a == "--minimized");
             if minimized {
@@ -78,6 +86,7 @@ pub fn run() {
             commands::get_slideshow_status,
             commands::get_monitor_slideshow_status,
             commands::sync_restart_all,
+            commands::update_slideshow_settings,
             commands::update_tray_locale,
             commands::toggle_pin_all,
             commands::is_all_pinned,
