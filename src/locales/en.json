@@ -2,7 +2,9 @@
   "app": {
     "name": "DualSlide",
     "settings": "Settings",
-    "quit": "Quit"
+    "quit": "Quit",
+    "layout_vertical": "Vertical layout",
+    "layout_horizontal": "Horizontal layout"
   },
   "monitor": {
     "primary": "Primary",
@@ -34,7 +36,8 @@
     "pause_all": "Pause All",
     "resume_all": "Resume All",
     "start_all": "Start All",
-    "sync_timers": "Sync timers"
+    "sync_timers": "Sync timers",
+    "apply": "Apply"
   },
   "settings": {
     "autostart": "Start on boot",

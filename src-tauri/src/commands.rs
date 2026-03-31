@@ -109,6 +109,17 @@ pub fn sync_restart_all(engine: State<'_, SlideshowEngine>) -> Result<(), String
     engine.sync_restart_all()
 }
 
+#[tauri::command]
+pub fn update_slideshow_settings(
+    engine: State<'_, SlideshowEngine>,
+    monitor_id: String,
+    interval_secs: u64,
+    mode: SlideshowMode,
+    image_paths: Option<Vec<String>>,
+) -> Result<(), String> {
+    engine.update_settings(monitor_id, interval_secs, mode, image_paths)
+}
+
 // ── Pin ─────────────────────────────────────────────────────────────
 
 #[tauri::command]

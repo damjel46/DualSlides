@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
+import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { motion } from "motion/react";
 import { MonitorCard } from "./components/MonitorCard";
 import { MonitorLayout } from "./components/MonitorLayout";
 import { Settings } from "./components/Settings";
+import type { SettingsTab } from "./components/Settings";
 import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncIntervalFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
 import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import type { Schedule } from "./lib/commands";
 
 function App() {
@@ -20,11 +23,46 @@ function App() {
     statuses, startFiles, stop, next, prev, pause, syncRestart, refresh,
   } = useSlideshow();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
   const { syncEnabled, setSync } = useAppConfig();
   const [hasStoredConfigs, setHasStoredConfigs] = useState(false);
   const [zenActive, setZenActive] = useState(false);
   const [allPinned, setAllPinned] = useState(false);
+  const [layout, setLayout] = useState<"vertical" | "horizontal">("vertical");
+
+  // Load saved layout preference
+  useEffect(() => {
+    load("settings.json", { autoSave: true, defaults: {} }).then(async (store) => {
+      const saved = await store.get<string>("layout");
+      if (saved === "vertical" || saved === "horizontal") {
+        setLayout(saved);
+        applyLayoutSize(saved);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const applyLayoutSize = async (mode: "vertical" | "horizontal") => {
+    const win = getCurrentWindow();
+    // min-w-[280px] (layout) + min-w-[380px] (card) + gap + padding ≈ 760
+    const minW = mode === "horizontal" ? 760 : 600;
+    const minH = mode === "horizontal" ? 500 : 700;
+    await win.setMinSize(new LogicalSize(minW, minH));
+    const size = await win.innerSize();
+    const newW = Math.max(size.width, minW);
+    const newH = Math.max(size.height, minH);
+    if (newW !== size.width || newH !== size.height) {
+      await win.setSize(new LogicalSize(newW, newH));
+    }
+  };
+
+  const toggleLayout = async () => {
+    const next = layout === "vertical" ? "horizontal" : "vertical";
+    setLayout(next);
+    await applyLayoutSize(next);
+    const store = await load("settings.json", { autoSave: true, defaults: {} });
+    await store.set("layout", next);
+  };
 
   // Zen mode: load initial state + listen for changes (from tray toggle)
   useEffect(() => {
@@ -34,6 +72,22 @@ function App() {
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
+
+  // Zen mode: register ESC key to exit
+  const handleToggleZenRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!zenActive) return;
+
+    register("Escape", (event) => {
+      if (event.state === "Pressed") {
+        handleToggleZenRef.current();
+      }
+    }).catch((e) => console.error("Failed to register Escape hotkey:", e));
+
+    return () => {
+      unregister("Escape").catch(() => {});
+    };
+  }, [zenActive]);
 
   // ── Schedule: restore from store on startup ─────────────────────────
   useEffect(() => {
@@ -87,31 +141,6 @@ function App() {
   // Track whether slideshow was running before zen mode
   const wasRunningBeforeZen = useRef(false);
 
-  const handleToggleZen = async () => {
-    try {
-      const anyRunningNow = Object.values(statuses).some((s) => s.is_running);
-
-      const active = await toggleZenMode();
-      setZenActive(active);
-
-      if (active) {
-        // Entering zen mode: save current slideshow state
-        wasRunningBeforeZen.current = anyRunningNow;
-        // If not running, start all slideshows
-        if (!anyRunningNow) {
-          await handleStartAll();
-        }
-      } else {
-        // Exiting zen mode: if slideshow wasn't running before, stop it
-        if (!wasRunningBeforeZen.current) {
-          await pause();
-        }
-      }
-    } catch (e) {
-      console.error("Zen mode toggle failed:", e);
-    }
-  };
-
   const handleTogglePin = async () => {
     try {
       const pinned = await togglePinAll();
@@ -156,7 +185,7 @@ function App() {
     });
   }, [statuses]);
 
-  const handleStartAll = async () => {
+  const handleStartAll = useCallback(async (forceSynced = false) => {
     const allConfigs = await getAllMonitorConfigs();
 
     const perMonitor: { mid: string; paths: string[]; interval: number; mode: "Sequential" | "Shuffle" }[] = [];
@@ -222,7 +251,7 @@ function App() {
 
     if (perMonitor.length === 0) return;
 
-    if (syncEnabled && perMonitor.length > 1) {
+    if ((syncEnabled || forceSynced) && perMonitor.length > 1) {
       const syncInterval = perMonitor[0].interval;
       const syncMode = perMonitor[0].mode;
       const monitorsData: [string, string[]][] = perMonitor.map((m) => [m.mid, m.paths]);
@@ -233,7 +262,35 @@ function App() {
       }
     }
     await refresh();
-  };
+  }, [syncEnabled, startFiles, refresh]);
+
+  const handleToggleZen = useCallback(async () => {
+    try {
+      const anyRunningNow = Object.values(statuses).some((s) => s.is_running);
+
+      const active = await toggleZenMode();
+      setZenActive(active);
+
+      if (active) {
+        // Entering zen mode: save current slideshow state
+        wasRunningBeforeZen.current = anyRunningNow;
+        // If not running, start all slideshows with synced timers
+        if (!anyRunningNow) {
+          await handleStartAll(true);
+        }
+      } else {
+        // Exiting zen mode: if slideshow wasn't running before, stop it
+        if (!wasRunningBeforeZen.current) {
+          await pause();
+        }
+      }
+    } catch (e) {
+      console.error("Zen mode toggle failed:", e);
+    }
+  }, [statuses, handleStartAll, pause]);
+
+  // Keep ref in sync for ESC handler
+  handleToggleZenRef.current = handleToggleZen;
 
   const selectedMonitorId =
     selectedMonitor !== null
@@ -369,7 +426,7 @@ function App() {
           break;
       }
     },
-    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop, handleToggleZen, handleTogglePin, handleToggleFavoriteCurrent],
+    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop, handleStartAll, handleToggleZen, handleTogglePin, handleToggleFavoriteCurrent],
   );
 
   const { hotkeys, updateHotkey } = useHotkeys(handleHotkeyAction);
@@ -472,9 +529,49 @@ function App() {
             </motion.button>
           )}
 
+          {/* Layout toggle */}
+          <button
+            onClick={toggleLayout}
+            className="rounded-full p-2 text-ds-text-muted transition hover:bg-white/10 hover:text-ds-text"
+            title={layout === "vertical" ? t("app.layout_horizontal") : t("app.layout_vertical")}
+          >
+            {layout === "vertical" ? (
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4m6-18h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v18" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9V5a2 2 0 012-2h14a2 2 0 012 2v4m-18 6v4a2 2 0 002 2h14a2 2 0 002-2v-4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12h18" />
+              </svg>
+            )}
+          </button>
+
+          {/* Schedule shortcut */}
+          <button
+            onClick={() => { setSettingsTab("schedule"); setSettingsOpen(true); }}
+            className="rounded-full p-2 text-ds-text-muted transition hover:bg-white/10 hover:text-ds-text"
+            title={t("schedule.title")}
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </button>
+
           {/* Settings gear */}
           <button
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => { setSettingsTab("general"); setSettingsOpen(true); }}
             className="rounded-full p-2 text-ds-text-muted transition hover:bg-white/10 hover:text-ds-text"
             title={t("app.settings")}
           >
@@ -504,7 +601,7 @@ function App() {
 
       {/* Main content */}
       <main className="relative z-10 flex-1 overflow-y-auto px-6 py-5">
-        <div className="mx-auto max-w-4xl space-y-5">
+        <div className={`mx-auto ${layout === "horizontal" ? "flex max-w-6xl gap-5 items-start" : "max-w-4xl space-y-5"}`}>
           {/* Loading */}
           {loading && (
             <div className="flex items-center justify-center py-20">
@@ -514,42 +611,47 @@ function App() {
 
           {/* Monitor layout diagram */}
           {!loading && monitors.length > 0 && (
-            <MonitorLayout
-              monitors={monitors}
-              statuses={statuses}
-              selectedIndex={selectedMonitor}
-              onSelect={setSelectedMonitor}
-              zenActive={zenActive}
-              onToggleZen={handleToggleZen}
-            />
+            <div className={layout === "horizontal" ? "w-2/5 min-w-[280px] shrink-0 sticky top-0" : ""}>
+              <MonitorLayout
+                monitors={monitors}
+                statuses={statuses}
+                selectedIndex={selectedMonitor}
+                onSelect={setSelectedMonitor}
+                zenActive={zenActive}
+                onToggleZen={handleToggleZen}
+              />
+            </div>
           )}
 
           {/* Selected monitor config panel */}
-          {selectedMon ? (
-            <MonitorCard
-              monitor={selectedMon}
-              status={statuses[selectedMon.id]}
-              syncEnabled={syncEnabled}
-              pinned={allPinned}
-              onTogglePin={handleTogglePin}
-              onSyncToggle={handleSyncToggle}
-              onStartFiles={startFilesWithSync}
-              onStop={stopWithSync}
-              onNext={nextWithSync}
-              onPrev={prevWithSync}
-            />
-          ) : (
-            !loading &&
-            monitors.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="rounded-2xl border border-dashed border-ds-border py-12 text-center text-sm text-ds-text-muted"
-              >
-                {t("monitor.select_monitor")}
-              </motion.div>
-            )
-          )}
+          <div className={layout === "horizontal" ? "min-w-[380px] flex-1 overflow-y-auto" : ""}>
+            {selectedMon ? (
+              <MonitorCard
+                monitor={selectedMon}
+                status={statuses[selectedMon.id]}
+                syncEnabled={syncEnabled}
+                pinned={allPinned}
+                onTogglePin={handleTogglePin}
+                onSyncToggle={handleSyncToggle}
+                onStartFiles={startFilesWithSync}
+                onStop={stopWithSync}
+                onNext={nextWithSync}
+                onPrev={prevWithSync}
+                onRefresh={refresh}
+              />
+            ) : (
+              !loading &&
+              monitors.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="rounded-2xl border border-dashed border-ds-border py-12 text-center text-sm text-ds-text-muted"
+                >
+                  {t("monitor.select_monitor")}
+                </motion.div>
+              )
+            )}
+          </div>
         </div>
       </main>
 
@@ -560,6 +662,8 @@ function App() {
         hotkeys={hotkeys}
         onUpdateHotkey={updateHotkey}
         monitorIds={monitors.map((m) => m.id)}
+        activeTab={settingsTab}
+        onTabChange={setSettingsTab}
       />
     </div>
   );

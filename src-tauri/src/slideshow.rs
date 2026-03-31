@@ -1,4 +1,5 @@
 use rand::seq::SliceRandom;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -229,6 +230,7 @@ impl SlideshowEngine {
 
         tauri::async_runtime::spawn(async move {
             let mut index = start_index;
+            let interval_dur = Duration::from_secs(interval_secs);
 
             // Pre-convert current image
             {
@@ -238,63 +240,66 @@ impl SlideshowEngine {
                 }).await;
             }
 
-            // Absolute-time interval — no drift from SetWallpaper duration
-            let mut ticker = time::interval(Duration::from_secs(interval_secs));
-            ticker.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
-
             loop {
-                // Wait for tick or cancel
-                tokio::select! {
-                    _ = ticker.tick() => {}
-                    _ = token.cancelled() => { break; }
-                }
-
-                if token.is_cancelled() { break; }
-
                 // Check if pinned — skip wallpaper change but keep timer running
                 let pinned = {
                     let map = monitors.lock().unwrap();
                     map.get(&mid).map(|ms| ms.is_pinned).unwrap_or(false)
                 };
-                if pinned { continue; }
 
-                // Apply wallpaper (already BMP-cached)
-                let wp_mid = mid.clone();
-                let wp_path = images[index % total].clone();
-                let wp_result = tokio::task::spawn_blocking(move || {
-                    monitor::set_wallpaper(&wp_mid, &wp_path)
-                }).await;
+                if !pinned {
+                    // Apply wallpaper immediately
+                    let wp_mid = mid.clone();
+                    let wp_path = images[index % total].clone();
+                    let wp_result = tokio::task::spawn_blocking(move || {
+                        monitor::set_wallpaper(&wp_mid, &wp_path)
+                    }).await;
 
-                match wp_result {
-                    Ok(Err(e)) => log::error!("[{}] set_wallpaper failed: {}", mid, e),
-                    Err(e) => log::error!("[{}] spawn_blocking panic: {}", mid, e),
-                    _ => {}
-                }
-
-                // Update shared state
-                {
-                    let mut map = monitors.lock().unwrap();
-                    if let Some(ms) = map.get_mut(&mid) {
-                        ms.current_index = index % total;
+                    match wp_result {
+                        Ok(Err(e)) => log::error!("[{}] set_wallpaper failed: {}", mid, e),
+                        Err(e) => log::error!("[{}] spawn_blocking panic: {}", mid, e),
+                        _ => {}
                     }
+
+                    // Update shared state
+                    {
+                        let mut map = monitors.lock().unwrap();
+                        if let Some(ms) = map.get_mut(&mid) {
+                            ms.current_index = index % total;
+                        }
+                    }
+
+                    // Pre-convert NEXT image in background
+                    let next_path = images[(index + 1) % total].clone();
+                    tokio::task::spawn_blocking(move || {
+                        let _ = monitor::ensure_bmp(&next_path);
+                    });
+
+                    index += 1;
                 }
 
-                // Pre-convert NEXT image in background
-                let next_path = images[(index + 1) % total].clone();
-                tokio::task::spawn_blocking(move || {
-                    let _ = monitor::ensure_bmp(&next_path);
-                });
+                // Wait for interval or cancel
+                tokio::select! {
+                    _ = time::sleep(interval_dur) => {}
+                    _ = token.cancelled() => { break; }
+                }
 
-                index += 1;
+                if token.is_cancelled() { break; }
             }
 
-            // Mark stopped
+            // Mark stopped — only if our token is still the active one
+            // (a new timer may have already replaced us via update_settings)
             let mut map = monitors.lock().unwrap();
             if let Some(ms) = map.get_mut(&mid) {
-                ms.is_running = false;
-                ms.cancel_token = None;
+                let is_our_token = ms.cancel_token.as_ref()
+                    .map(|t| t.is_cancelled())
+                    .unwrap_or(true);
+                if is_our_token {
+                    ms.is_running = false;
+                    ms.cancel_token = None;
+                    log::info!("Slideshow stopped: {}", mid);
+                }
             }
-            log::info!("Slideshow stopped: {}", mid);
         });
     }
 
@@ -311,6 +316,88 @@ impl SlideshowEngine {
         }
     }
 
+    // ── 2b. update settings on a running slideshow ────────────────────
+
+    /// Update interval and/or mode on a running slideshow without losing
+    /// the current position. Internally stops the old timer and spawns a
+    /// new one with the updated settings.
+    pub fn update_settings(
+        &self,
+        monitor_id: String,
+        interval_secs: u64,
+        mode: SlideshowMode,
+        image_paths: Option<Vec<String>>,
+    ) -> Result<(), String> {
+        let (images, current_index, was_pinned, folder_path) = {
+            let map = self.monitors.lock().unwrap();
+            let ms = map
+                .get(&monitor_id)
+                .ok_or_else(|| format!("No slideshow for {}", monitor_id))?;
+            if !ms.is_running {
+                return Err("Slideshow is not running".into());
+            }
+            (ms.images.clone(), ms.current_index, ms.is_pinned, ms.folder_path.clone())
+        };
+
+        // Use new image list if provided, otherwise keep existing
+        let base_images = image_paths.unwrap_or(images);
+        let base_index = if base_images.len() != {
+            let map = self.monitors.lock().unwrap();
+            map.get(&monitor_id).map(|ms| ms.images.len()).unwrap_or(0)
+        } {
+            0 // Reset index when image list changed
+        } else {
+            current_index
+        };
+
+        // Re-shuffle if Shuffle mode, reset index
+        let (final_images, final_index) = if mode == SlideshowMode::Shuffle {
+            let mut imgs = base_images;
+            let mut rng = rand::thread_rng();
+            imgs.shuffle(&mut rng);
+            (imgs, 0)
+        } else {
+            (base_images, base_index)
+        };
+
+        // Cancel old timer only (do NOT mark is_running = false)
+        {
+            let mut map = self.monitors.lock().unwrap();
+            if let Some(ms) = map.get_mut(&monitor_id) {
+                if let Some(token) = ms.cancel_token.take() {
+                    token.cancel();
+                }
+            }
+        }
+
+        // Spawn new timer with updated settings
+        let token = CancellationToken::new();
+        {
+            let mut map = self.monitors.lock().unwrap();
+            map.insert(
+                monitor_id.clone(),
+                MonitorSlideshow {
+                    folder_path,
+                    images: final_images.clone(),
+                    current_index: final_index,
+                    interval_secs,
+                    mode: mode.clone(),
+                    is_running: true,
+                    is_pinned: was_pinned,
+                    cancel_token: Some(token.clone()),
+                },
+            );
+        }
+
+        log::info!(
+            "Slideshow settings updated: {} | {}s | {:?}",
+            monitor_id, interval_secs, mode
+        );
+
+        self.spawn_timer(monitor_id, final_images, interval_secs, final_index, token);
+        Ok(())
+    }
+
     // ── 3. next / prev ───────────────────────────────────────────────
 
     pub fn next_wallpaper(&self, monitor_id: &str) -> Result<(), String> {
@@ -323,12 +410,23 @@ impl SlideshowEngine {
             return Err("Image list is empty".into());
         }
 
-        ms.current_index = (ms.current_index + 1) % ms.images.len();
-        let path = ms.images[ms.current_index].clone();
+        if ms.mode == SlideshowMode::Shuffle && ms.images.len() > 1 {
+            // Pick a random index different from current
+            let mut rng = rand::thread_rng();
+            let mut next = ms.current_index;
+            while next == ms.current_index {
+                next = rng.gen_range(0..ms.images.len());
+            }
+            ms.current_index = next;
+        } else {
+            ms.current_index = (ms.current_index + 1) % ms.images.len();
+        }
+        let idx = ms.current_index;
+        let path = ms.images[idx].clone();
         drop(map); // release lock before I/O
 
         monitor::set_wallpaper(monitor_id, &path)?;
-        log::info!("[{}] next → index {}", monitor_id, 0 /* logged above */);
+        log::info!("[{}] next → index {}", monitor_id, idx);
         Ok(())
     }
 
@@ -342,16 +440,26 @@ impl SlideshowEngine {
             return Err("Image list is empty".into());
         }
 
-        ms.current_index = if ms.current_index == 0 {
-            ms.images.len() - 1
+        if ms.mode == SlideshowMode::Shuffle && ms.images.len() > 1 {
+            // Pick a random index different from current
+            let mut rng = rand::thread_rng();
+            let mut next = ms.current_index;
+            while next == ms.current_index {
+                next = rng.gen_range(0..ms.images.len());
+            }
+            ms.current_index = next;
         } else {
-            ms.current_index - 1
-        };
+            ms.current_index = if ms.current_index == 0 {
+                ms.images.len() - 1
+            } else {
+                ms.current_index - 1
+            };
+        }
         let path = ms.images[ms.current_index].clone();
         drop(map);
 
         monitor::set_wallpaper(monitor_id, &path)?;
-        log::info!("[{}] prev", monitor_id);
+        log::info!("[{}] prev (shuffle random)", monitor_id);
         Ok(())
     }
 

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible } from "../lib/commands";
+import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible, updateSlideshowSettings } from "../lib/commands";
 import { useMonitorConfig, syncIntervalFromMonitor } from "../hooks/useMonitorConfig";
 import type {
   MonitorInfo,
@@ -277,6 +277,7 @@ interface MonitorCardProps {
   onStop: (monitorId: string) => void;
   onNext: (monitorId: string) => void;
   onPrev: (monitorId: string) => void;
+  onRefresh: () => void;
 }
 
 const PRESETS = [
@@ -300,6 +301,7 @@ export function MonitorCard({
   onStop,
   onNext,
   onPrev,
+  onRefresh,
 }: MonitorCardProps) {
   const { t } = useTranslation();
   const { config, update, loaded } = useMonitorConfig(monitor.id);
@@ -333,6 +335,39 @@ export function MonitorCard({
   } = config;
   const excluded = new Set(excludedArr);
   const favorites = new Set(favoritesArr);
+
+  // Compute effective interval once for use everywhere
+  const effectiveInterval = useCustom ? Math.max(1, Math.min(MAX_INTERVAL, Number(customInput) || interval)) : interval;
+
+  // Build the image path list that would be used if we started/applied now
+  const buildActivePaths = () => {
+    const activePaths = images
+      .filter((img) => !excluded.has(img.path))
+      .map((img) => img.path);
+    if (mode === "Shuffle" && favorites.size > 0) {
+      const extras: string[] = [];
+      for (const p of activePaths) {
+        if (favorites.has(p)) extras.push(p, p);
+      }
+      return [...activePaths, ...extras];
+    }
+    return activePaths;
+  };
+
+  // Detect if running slideshow settings differ from config
+  const isRunning = status?.is_running ?? false;
+  const currentPaths = buildActivePaths();
+  const settingsChanged = isRunning && (
+    status!.interval_secs !== effectiveInterval ||
+    status!.mode !== mode ||
+    status!.total_images !== currentPaths.length
+  );
+
+  const handleApplySettings = () => {
+    updateSlideshowSettings(monitor.id, effectiveInterval, mode, currentPaths)
+      .then(() => onRefresh())
+      .catch((e) => console.error("Failed to apply settings:", e));
+  };
 
   // Effective folders list: migrate from legacy single `folder` field
   const folders = foldersArr && foldersArr.length > 0 ? foldersArr : folder ? [folder] : [];
@@ -488,31 +523,12 @@ export function MonitorCard({
     }
   };
 
-  const effectiveInterval = useCustom
-    ? Math.min(Math.max(parseInt(customInput, 10) || 1, 1), MAX_INTERVAL)
-    : interval;
-
-  const isRunning = status?.is_running ?? false;
   const hasImages = checkedCount > 0;
 
   const handlePlay = () => {
-    const activePaths = images
-      .filter((img) => !excluded.has(img.path))
-      .map((img) => img.path);
-    if (activePaths.length === 0) return;
-
-    // In shuffle mode, duplicate favorite paths 3x for weighted selection
-    let finalPaths = activePaths;
-    if (mode === "Shuffle" && favorites.size > 0) {
-      const extras: string[] = [];
-      for (const p of activePaths) {
-        if (favorites.has(p)) {
-          extras.push(p, p); // 2 extra copies = 3x total
-        }
-      }
-      finalPaths = [...activePaths, ...extras];
-    }
-    onStartFiles(monitor.id, finalPaths, effectiveInterval, mode);
+    const paths = buildActivePaths();
+    if (paths.length === 0) return;
+    onStartFiles(monitor.id, paths, effectiveInterval, mode);
   };
 
   const isPreset = !useCustom && PRESETS.some((p) => p.value === interval);
@@ -805,6 +821,22 @@ export function MonitorCard({
               {t("slideshow.shuffle")}
             </button>
           </div>
+
+          {/* Apply settings button — always visible, disabled when no changes */}
+          <button
+            onClick={handleApplySettings}
+            disabled={!settingsChanged}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+              settingsChanged
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+                : "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
+            }`}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {t("slideshow.apply")}
+          </button>
         </div>
         </div>
       </div>

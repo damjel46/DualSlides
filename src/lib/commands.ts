@@ -123,6 +123,15 @@ export async function syncRestartAll(): Promise<void> {
   return invoke("sync_restart_all");
 }
 
+export async function updateSlideshowSettings(
+  monitorId: string,
+  intervalSecs: number,
+  mode: SlideshowMode,
+  imagePaths?: string[],
+): Promise<void> {
+  return invoke("update_slideshow_settings", { monitorId, intervalSecs, mode, imagePaths });
+}
+
 // ── Pin ─────────────────────────────────────────────────────────────
 
 export async function togglePinAll(): Promise<boolean> {
