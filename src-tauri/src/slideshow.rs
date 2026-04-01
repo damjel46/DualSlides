@@ -232,14 +232,6 @@ impl SlideshowEngine {
             let mut index = start_index;
             let interval_dur = Duration::from_secs(interval_secs);
 
-            // Pre-convert current image
-            {
-                let path = images[index % total].clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    monitor::ensure_bmp(&path)
-                }).await;
-            }
-
             loop {
                 // Check if pinned — skip wallpaper change but keep timer running
                 let pinned = {
@@ -268,12 +260,6 @@ impl SlideshowEngine {
                             ms.current_index = index % total;
                         }
                     }
-
-                    // Pre-convert NEXT image in background
-                    let next_path = images[(index + 1) % total].clone();
-                    tokio::task::spawn_blocking(move || {
-                        let _ = monitor::ensure_bmp(&next_path);
-                    });
 
                     index += 1;
                 }
@@ -608,15 +594,6 @@ impl SlideshowEngine {
 
             // Pre-convert current images at resume index
             {
-                let mut pre = Vec::new();
-                for (_, images) in &entries {
-                    if images.is_empty() { continue; }
-                    let p = images[index % images.len()].clone();
-                    pre.push(tokio::task::spawn_blocking(move || {
-                        let _ = monitor::ensure_bmp(&p);
-                    }));
-                }
-                for h in pre { let _ = h.await; }
             }
 
             // Apply wallpaper immediately at start (before first interval wait)
@@ -702,16 +679,6 @@ impl SlideshowEngine {
                     }
                 }
 
-                // Pre-convert next for unpinned monitors
-                for (mid, images) in &entries {
-                    if pinned_set.contains(mid) { continue; }
-                    let total = images.len();
-                    if total == 0 { continue; }
-                    let p = images[(index + 1) % total].clone();
-                    tokio::task::spawn_blocking(move || {
-                        let _ = monitor::ensure_bmp(&p);
-                    });
-                }
 
                 index += 1;
             }
@@ -803,15 +770,6 @@ impl SlideshowEngine {
 
             // Pre-convert current images for all monitors
             {
-                let mut pre_handles = Vec::new();
-                for (_, images) in &monitor_data {
-                    if images.is_empty() { continue; }
-                    let path = images[index % images.len()].clone();
-                    pre_handles.push(tokio::task::spawn_blocking(move || {
-                        let _ = monitor::ensure_bmp(&path);
-                    }));
-                }
-                for h in pre_handles { let _ = h.await; }
             }
 
             // Apply wallpaper immediately at start
@@ -903,16 +861,6 @@ impl SlideshowEngine {
                     }
                 }
 
-                // Pre-convert NEXT images for unpinned monitors
-                for (mid, images) in &monitor_data {
-                    if pinned_set.contains(mid) { continue; }
-                    let total = images.len();
-                    if total == 0 { continue; }
-                    let next_path = images[(index + 1) % total].clone();
-                    tokio::task::spawn_blocking(move || {
-                        let _ = monitor::ensure_bmp(&next_path);
-                    });
-                }
 
                 index += 1;
             }

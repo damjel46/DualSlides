@@ -98,6 +98,6 @@
     "30m": "30 min",
     "1h": "1 hour",
     "custom": "Custom",
-    "seconds": "sec (max 86400)"
+    "seconds": "sec (max 86400, 5s+ recommended)"
   }
 }

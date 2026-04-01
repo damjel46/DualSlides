@@ -21,36 +21,62 @@ export const ACCENT_COLORS: AccentColor[] = [
   { id: "slate",   name: "Slate",   dark: { accent: "#64748b", accentLight: "#94a3b8" }, light: { accent: "#475569", accentLight: "#64748b" } },
 ];
 
+// Lighten a hex color by a fixed amount for the "accentLight" variant
+function lightenHex(hex: string, amount = 25): string {
+  const h = hex.replace("#", "");
+  const r = Math.min(255, parseInt(h.substring(0, 2), 16) + amount);
+  const g = Math.min(255, parseInt(h.substring(2, 4), 16) + amount);
+  const b = Math.min(255, parseInt(h.substring(4, 6), 16) + amount);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
 function applyAccent(theme: Theme, color: AccentColor) {
   const values = theme === "dark" ? color.dark : color.light;
   document.documentElement.style.setProperty("--ds-accent", values.accent);
   document.documentElement.style.setProperty("--ds-accent-light", values.accentLight);
 }
 
+function applyCustomAccent(hex: string) {
+  document.documentElement.style.setProperty("--ds-accent", hex);
+  document.documentElement.style.setProperty("--ds-accent-light", lightenHex(hex));
+}
+
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>("dark");
   const [accentId, setAccentIdState] = useState("cyan");
+  const [customHex, setCustomHexState] = useState<string | null>(null);
 
   useEffect(() => {
     load("settings.json", { autoSave: true, defaults: {} }).then(async (store) => {
       const savedTheme = await store.get<Theme>("theme");
       const savedAccent = await store.get<string>("accentColor");
+      const savedCustom = await store.get<string>("customAccentHex");
 
       const t = savedTheme === "dark" || savedTheme === "light" ? savedTheme : "dark";
-      const a = ACCENT_COLORS.find((c) => c.id === savedAccent) ? savedAccent! : "cyan";
-
-      setThemeState(t);
-      setAccentIdState(a);
       document.documentElement.dataset.theme = t;
-      applyAccent(t, ACCENT_COLORS.find((c) => c.id === a)!);
+      setThemeState(t);
+
+      if (savedAccent === "custom" && savedCustom) {
+        setAccentIdState("custom");
+        setCustomHexState(savedCustom);
+        applyCustomAccent(savedCustom);
+      } else {
+        const a = ACCENT_COLORS.find((c) => c.id === savedAccent) ? savedAccent! : "cyan";
+        setAccentIdState(a);
+        applyAccent(t, ACCENT_COLORS.find((c) => c.id === a)!);
+      }
     }).catch(() => {});
   }, []);
 
   const setTheme = async (t: Theme) => {
     setThemeState(t);
     document.documentElement.dataset.theme = t;
-    const color = ACCENT_COLORS.find((c) => c.id === accentId)!;
-    applyAccent(t, color);
+    if (accentId === "custom" && customHex) {
+      applyCustomAccent(customHex);
+    } else {
+      const color = ACCENT_COLORS.find((c) => c.id === accentId)!;
+      applyAccent(t, color);
+    }
     const store = await load("settings.json", { autoSave: true, defaults: {} });
     await store.set("theme", t);
   };
@@ -59,12 +85,24 @@ export function useTheme() {
     const color = ACCENT_COLORS.find((c) => c.id === id);
     if (!color) return;
     setAccentIdState(id);
+    setCustomHexState(null);
     applyAccent(theme, color);
     const store = await load("settings.json", { autoSave: true, defaults: {} });
     await store.set("accentColor", id);
+    await store.set("customAccentHex", null);
+  };
+
+  const setCustomAccent = async (hex: string) => {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+    setAccentIdState("custom");
+    setCustomHexState(hex);
+    applyCustomAccent(hex);
+    const store = await load("settings.json", { autoSave: true, defaults: {} });
+    await store.set("accentColor", "custom");
+    await store.set("customAccentHex", hex);
   };
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
-  return { theme, setTheme, toggleTheme, accentId, setAccent };
+  return { theme, setTheme, toggleTheme, accentId, setAccent, customHex, setCustomAccent };
 }

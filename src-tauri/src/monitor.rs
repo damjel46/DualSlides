@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,92 +40,6 @@ pub fn cache_tauri_monitors(monitors: &[MonitorInfo]) {
 
 fn get_cached_monitors() -> Vec<MonitorInfo> {
     TAURI_MONITORS.lock().unwrap().clone()
-}
-
-// ── BMP cache ────────────────────────────────────────────────────────
-// Pre-converts images to BMP so Windows doesn't need to decode jpg/png/webp
-// on each SetWallpaper call. Cached in temp dir, keyed by source path + mtime.
-
-static BMP_CACHE: Mutex<Option<BmpCache>> = Mutex::new(None);
-
-struct BmpCache {
-    dir: PathBuf,
-    map: HashMap<String, PathBuf>, // source_path -> cached bmp path
-}
-
-fn get_bmp_cache_dir() -> PathBuf {
-    let dir = std::env::temp_dir().join("dualslide_bmp_cache");
-    if !dir.exists() {
-        let _ = fs::create_dir_all(&dir);
-    }
-    dir
-}
-
-/// Convert image to BMP and cache it. Returns the BMP path.
-/// If already cached (and source not modified), returns cached path.
-/// If source is already BMP, returns source path as-is.
-/// Pre-convert an image to BMP (cached). Can be called ahead of time
-/// during sleep to avoid blocking the wallpaper swap.
-pub fn ensure_bmp(source: &str) -> Result<String, String> {
-    let src_path = Path::new(source);
-    let ext = src_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase())
-        .unwrap_or_default();
-
-    // BMP files don't need conversion
-    if ext == "bmp" {
-        return Ok(source.to_string());
-    }
-
-    // Build cache key from path + file size (cheap mtime proxy)
-    let metadata = fs::metadata(src_path)
-        .map_err(|e| format!("Cannot read file metadata: {}", e))?;
-    let cache_key = format!("{}_{}", source, metadata.len());
-
-    // Check cache
-    {
-        let guard = BMP_CACHE.lock().unwrap();
-        if let Some(ref cache) = *guard {
-            if let Some(cached) = cache.map.get(&cache_key) {
-                if cached.exists() {
-                    return Ok(cached.to_string_lossy().to_string());
-                }
-            }
-        }
-    }
-
-    // Convert to BMP
-    let img = image::open(src_path)
-        .map_err(|e| format!("Failed to decode image '{}': {}", source, e))?;
-
-    let cache_dir = get_bmp_cache_dir();
-    let hash = {
-        use std::hash::{Hash, Hasher};
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        cache_key.hash(&mut h);
-        h.finish()
-    };
-    let bmp_path = cache_dir.join(format!("{:016x}.bmp", hash));
-
-    img.save_with_format(&bmp_path, image::ImageFormat::Bmp)
-        .map_err(|e| format!("Failed to save BMP cache: {}", e))?;
-
-    let bmp_str = bmp_path.to_string_lossy().to_string();
-
-    // Store in cache
-    {
-        let mut guard = BMP_CACHE.lock().unwrap();
-        let cache = guard.get_or_insert_with(|| BmpCache {
-            dir: cache_dir,
-            map: HashMap::new(),
-        });
-        cache.map.insert(cache_key, bmp_path);
-    }
-
-    log::info!("BMP cached: {} -> {}", source, bmp_str);
-    Ok(bmp_str)
 }
 
 // ── Monitor detection ────────────────────────────────────────────────
@@ -404,13 +317,10 @@ pub fn set_wallpaper(monitor_id: &str, image_path: &str) -> Result<(), String> {
             msg
         })?;
 
-    // Convert to BMP for faster Windows rendering (cached)
-    let bmp_path = ensure_bmp(image_path)?;
-
     #[cfg(target_os = "windows")]
     {
         let cached = get_cached_monitors();
-        win::set_wallpaper_by_index(target_index, &bmp_path, &cached)?;
+        win::set_wallpaper_by_index(target_index, image_path, &cached)?;
     }
 
     #[cfg(not(target_os = "windows"))]

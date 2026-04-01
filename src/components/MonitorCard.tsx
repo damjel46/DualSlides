@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
-import { load } from "@tauri-apps/plugin-store";
 import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible } from "../lib/commands";
 import { useMonitorConfig, syncIntervalFromMonitor } from "../hooks/useMonitorConfig";
 import type {
@@ -29,17 +27,6 @@ interface Profile {
   }>;
 }
 
-const PROFILES_STORE_KEY = "profiles";
-
-async function loadProfiles(): Promise<Profile[]> {
-  const store = await load("profiles.json", { autoSave: true, defaults: {} });
-  return (await store.get<Profile[]>(PROFILES_STORE_KEY)) || [];
-}
-
-async function saveProfiles(profiles: Profile[]): Promise<void> {
-  const store = await load("profiles.json", { autoSave: true, defaults: {} });
-  await store.set(PROFILES_STORE_KEY, profiles);
-}
 
 function SafeImage({
   src,
@@ -304,8 +291,6 @@ interface MonitorCardProps {
   onStop: (monitorId: string) => void;
   onRefresh: () => void;
   layout?: "vertical" | "horizontal";
-  previewOpen?: boolean;
-  onPreviewToggle?: (open: boolean) => void;
   profiles: Profile[];
   activeProfileId: string | null;
   onSaveProfile: () => void;
@@ -330,52 +315,23 @@ export function MonitorCard({
   status,
   syncEnabled,
   pinned,
-  onTogglePin,
+  onTogglePin: _onTogglePin,
   onSyncToggle,
   onStartFiles,
   onStop,
-  onRefresh,
+  onRefresh: _onRefresh,
   layout = "vertical",
-  previewOpen: previewOpenProp,
-  onPreviewToggle,
   profiles,
   activeProfileId,
   onSaveProfile,
   onLoadProfile,
   onDeleteProfile,
-  onSetProfileThumbnail,
-  onRenameProfile,
+  onSetProfileThumbnail: _onSetProfileThumbnail,
+  onRenameProfile: _onRenameProfile,
 }: MonitorCardProps) {
   const { t } = useTranslation();
   const { config, update, loaded } = useMonitorConfig(monitor.id);
-  const [previewOpenLocal, setPreviewOpenLocal] = useState(false);
-  const previewOpen = previewOpenProp ?? previewOpenLocal;
-  const previewRef = useRef<HTMLDivElement>(null);
   const [taskbarHidden, setTaskbarHidden] = useState(false);
-
-  // Resize window when preview opens/closes
-  const togglePreview = useCallback(async () => {
-    const win = getCurrentWindow();
-    const factor = await win.scaleFactor();
-    const size = await win.innerSize();
-    const logH = Math.round(size.height / factor);
-    const PREVIEW_HEIGHT = layout === "horizontal" ? 350 : 280;
-
-    if (!previewOpen) {
-      // Opening: grow window
-      await win.setSize(new LogicalSize(Math.round(size.width / factor), logH + PREVIEW_HEIGHT));
-    } else {
-      // Closing: shrink window, but not below min height
-      const minH = 700;
-      await win.setSize(new LogicalSize(Math.round(size.width / factor), Math.max(logH - PREVIEW_HEIGHT, minH)));
-    }
-    const next = !previewOpen;
-    if (onPreviewToggle) {
-      onPreviewToggle(next);
-    } else {
-      setPreviewOpenLocal(next);
-    }
-  }, [previewOpen, onPreviewToggle]);
 
   // Read initial taskbar visibility
   const monitorIndex = parseInt(monitor.id.replace("monitor_", ""), 10);
@@ -400,7 +356,7 @@ export function MonitorCard({
   // Destructure for convenience
   const {
     folder, folders: foldersArr, selectedFiles, images, excluded: excludedArr, favorites: favoritesArr,
-    selectionMode, interval, useCustom, customInput, mode, autoRefresh,
+    selectionMode: _selectionMode, interval, useCustom, customInput, mode,
   } = config;
   const excluded = new Set(excludedArr);
   const favorites = new Set(favoritesArr);
@@ -437,78 +393,79 @@ export function MonitorCard({
     onStartFiles(monitor.id, currentPaths, effectiveInterval, mode);
   };
 
+  // Auto-apply when image count changes during running slideshow (folder add/remove detected by auto-refresh)
+  const prevImageCount = useRef(status?.total_images ?? 0);
+  useEffect(() => {
+    if (!isRunning) {
+      prevImageCount.current = currentPaths.length;
+      return;
+    }
+    const runningCount = status!.total_images;
+    if (currentPaths.length !== runningCount && currentPaths.length > 0 && currentPaths.length !== prevImageCount.current) {
+      prevImageCount.current = currentPaths.length;
+      onStartFiles(monitor.id, currentPaths, effectiveInterval, mode);
+    }
+  }, [currentPaths.length]);
+
   // Effective folders list: migrate from legacy single `folder` field
   const folders = foldersArr && foldersArr.length > 0 ? foldersArr : folder ? [folder] : [];
 
-  // Scan all folders + merge with selectedFiles
+  // Shared scan function
+  const scanImages = async (isInitial: boolean) => {
+    try {
+      const folderImages: import("../lib/commands").ImageInfo[] = [];
+      for (const f of folders) {
+        const fresh = await getImagesFromFolder(f);
+        folderImages.push(...fresh);
+      }
+      const fileImages: import("../lib/commands").ImageInfo[] = selectedFiles.map((p) => ({
+        path: p,
+        filename: p.split(/[/\\]/).pop() || p,
+        size_bytes: 0,
+      }));
+      const seen = new Set<string>();
+      const allFresh: import("../lib/commands").ImageInfo[] = [];
+      for (const img of [...folderImages, ...fileImages]) {
+        if (!seen.has(img.path)) {
+          seen.add(img.path);
+          allFresh.push(img);
+        }
+      }
+      const freshPaths = new Set(allFresh.map((f) => f.path));
+      const oldPaths = new Set(images.map((f) => f.path));
+      if (
+        !isInitial &&
+        allFresh.length === images.length &&
+        allFresh.every((f) => oldPaths.has(f.path))
+      ) return;
+      if (isInitial && images.length === 0) {
+        update({ images: allFresh, excluded: [] });
+      } else {
+        const kept = images.filter((img) => freshPaths.has(img.path));
+        const keptPaths = new Set(kept.map((k) => k.path));
+        const added = allFresh.filter((f) => !keptPaths.has(f.path));
+        const merged = [...kept, ...added];
+        const cleanExcluded = excludedArr.filter((p) => freshPaths.has(p));
+        update({ images: merged, excluded: cleanExcluded });
+      }
+    } catch { /* ignore */ }
+  };
+
+  // 1) Immediate scan when folders/files list changes
   useEffect(() => {
     if (!loaded) return;
     if (folders.length === 0 && selectedFiles.length === 0) return;
-    let cancelled = false;
-
-    const scan = async (isInitial: boolean) => {
-      try {
-        // 1. Scan all folders
-        const folderImages: import("../lib/commands").ImageInfo[] = [];
-        for (const f of folders) {
-          const fresh = await getImagesFromFolder(f);
-          folderImages.push(...fresh);
-        }
-
-        // 2. Build individual file entries
-        const fileImages: import("../lib/commands").ImageInfo[] = selectedFiles.map((p) => ({
-          path: p,
-          filename: p.split(/[/\\]/).pop() || p,
-          size_bytes: 0,
-        }));
-
-        // 3. Combine, deduplicate by path
-        const seen = new Set<string>();
-        const allFresh: import("../lib/commands").ImageInfo[] = [];
-        for (const img of [...folderImages, ...fileImages]) {
-          if (!seen.has(img.path)) {
-            seen.add(img.path);
-            allFresh.push(img);
-          }
-        }
-
-        if (cancelled) return;
-        const freshPaths = new Set(allFresh.map((f) => f.path));
-        const oldPaths = new Set(images.map((f) => f.path));
-
-        // Skip update if nothing changed
-        if (
-          !isInitial &&
-          allFresh.length === images.length &&
-          allFresh.every((f) => oldPaths.has(f.path))
-        ) return;
-
-        if (isInitial && images.length === 0) {
-          update({ images: allFresh, excluded: [] });
-        } else {
-          const kept = images.filter((img) => freshPaths.has(img.path));
-          const keptPaths = new Set(kept.map((k) => k.path));
-          const added = allFresh.filter((f) => !keptPaths.has(f.path));
-          const merged = [...kept, ...added];
-          const cleanExcluded = excludedArr.filter((p) => freshPaths.has(p));
-          update({ images: merged, excluded: cleanExcluded });
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-
-    scan(images.length === 0);
-    let id: number | undefined;
-    if (autoRefresh && folders.length > 0) {
-      id = window.setInterval(() => scan(false), 5000);
-    }
-    return () => {
-      cancelled = true;
-      if (id) clearInterval(id);
-    };
+    scanImages(images.length === 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folders.join("|"), selectedFiles.join("|"), loaded, autoRefresh]);
+  }, [folders.join("|"), selectedFiles.join("|"), loaded]);
+
+  // 2) Background polling: detect images added/removed inside folders
+  useEffect(() => {
+    if (!loaded || folders.length === 0) return;
+    const id = window.setInterval(() => scanImages(false), 5000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folders.join("|"), loaded]);
 
   const handleAddFolder = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -599,7 +556,6 @@ export function MonitorCard({
     onStartFiles(monitor.id, paths, effectiveInterval, mode);
   };
 
-  const isPreset = !useCustom && PRESETS.some((p) => p.value === interval);
 
   if (!loaded) return null;
 
@@ -607,6 +563,9 @@ export function MonitorCard({
     <div className="rounded-2xl border border-ds-border bg-ds-card overflow-hidden">
 
       <div className="p-5">
+      {/* Header + Source — hidden in horizontal layout (shown in MonitorSource instead) */}
+      {layout !== "horizontal" && (
+        <>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -700,90 +659,62 @@ export function MonitorCard({
           </button>
         </div>
 
-        {/* Auto refresh checkbox — when folders exist */}
-        {folders.length > 0 && (
-          <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-ds-text-dim transition hover:text-ds-text">
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={() => update({ autoRefresh: !autoRefresh })}
-              className="h-3.5 w-3.5 accent-ds-accent"
-            />
-            {t("monitor.auto_refresh")}
-          </label>
-        )}
       </div>
+        </>
+      )}
 
       {/* Image preview with checkboxes + drag reorder */}
       {images.length > 0 && (
         <div className="mb-4">
-          {/* Toggle bar */}
-          <button
-            onClick={togglePreview}
-            className="mb-2 flex w-full items-center gap-2 text-xs text-ds-text-dim transition hover:text-ds-text"
-          >
-            <svg
-              className={`h-3.5 w-3.5 transition-transform ${previewOpen ? "rotate-90" : ""}`}
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                clipRule="evenodd"
-              />
-            </svg>
-            {previewOpen ? t("monitor.preview_collapse") : t("monitor.preview")}
+          {/* Preview header */}
+          <div className="mb-2 flex items-center gap-2 text-xs text-ds-text-dim">
+            {t("monitor.preview")}
             <span className="text-ds-text-muted">
               ({checkedCount}/{images.length})
             </span>
-          </button>
+          </div>
 
-          {previewOpen && (
-              <div>
-                {/* Select all / Deselect all / Favorites filter */}
-                <div className="mb-1.5 flex gap-2 text-[10px]">
-                  <button
-                    onClick={() => update({ excluded: [] })}
-                    className="text-ds-accent-light hover:underline"
-                  >
-                    {t("monitor.select_all")}
-                  </button>
-                  <button
-                    onClick={() =>
-                      update({ excluded: images.map((img) => img.path) })
-                    }
-                    className="text-ds-text-muted hover:underline"
-                  >
-                    {t("monitor.deselect_all")}
-                  </button>
-                  {favorites.size > 0 && (
-                    <button
-                      onClick={() => setFilterFavorites(!filterFavorites)}
-                      className={`flex items-center gap-0.5 ${filterFavorites ? "text-red-400" : "text-ds-text-muted hover:text-red-400"}`}
-                    >
-                      <svg className="h-3 w-3" fill={filterFavorites ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                      </svg>
-                      {t("favorite.filter")}
-                    </button>
-                  )}
-                </div>
-
-                <div className="max-h-[270px] overflow-y-auto rounded-lg">
-                <ImageGrid
-                  images={images}
-                  excluded={excluded}
-                  favorites={favorites}
-                  currentImage={status?.current_image}
-                  onToggle={toggleCheck}
-                  onToggleFavorite={toggleFavorite}
-                  onReorder={setImages}
-                  filterFavorites={filterFavorites}
-                />
-                </div>
-              </div>
+          {/* Select all / Deselect all / Favorites filter */}
+          <div className="mb-1.5 flex gap-2 text-[10px]">
+            <button
+              onClick={() => update({ excluded: [] })}
+              className="text-ds-accent-light hover:underline"
+            >
+              {t("monitor.select_all")}
+            </button>
+            <button
+              onClick={() =>
+                update({ excluded: images.map((img) => img.path) })
+              }
+              className="text-ds-text-muted hover:underline"
+            >
+              {t("monitor.deselect_all")}
+            </button>
+            {favorites.size > 0 && (
+              <button
+                onClick={() => setFilterFavorites(!filterFavorites)}
+                className={`flex items-center gap-0.5 ${filterFavorites ? "text-red-400" : "text-ds-text-muted hover:text-red-400"}`}
+              >
+                <svg className="h-3 w-3" fill={filterFavorites ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                {t("favorite.filter")}
+              </button>
             )}
+          </div>
+
+          <div className="max-h-[270px] overflow-y-auto rounded-lg">
+            <ImageGrid
+              images={images}
+              excluded={excluded}
+              favorites={favorites}
+              currentImage={status?.current_image}
+              onToggle={toggleCheck}
+              onToggleFavorite={toggleFavorite}
+              onReorder={setImages}
+              filterFavorites={filterFavorites}
+            />
+          </div>
         </div>
       )}
 

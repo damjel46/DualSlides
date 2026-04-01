@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: MonitorConfig = {
   useCustom: false,
   customInput: "",
   mode: "Sequential",
-  autoRefresh: false,
+  autoRefresh: true,
 };
 
 const STORE_FILE = "monitor-configs.json";

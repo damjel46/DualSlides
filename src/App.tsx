@@ -5,6 +5,7 @@ import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { motion } from "motion/react";
 import { MonitorCard } from "./components/MonitorCard";
 import { MonitorLayout } from "./components/MonitorLayout";
+import { MonitorSource } from "./components/MonitorSource";
 import { Settings } from "./components/Settings";
 import type { SettingsTab } from "./components/Settings";
 import { ScheduleModal } from "./components/ScheduleModal";
@@ -16,6 +17,7 @@ import { useTheme } from "./hooks/useTheme";
 import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { LAYOUT_SIZES } from "./lib/layout";
 import type { Schedule } from "./lib/commands";
 
 function App() {
@@ -41,8 +43,7 @@ function App() {
   const [zenActive, setZenActive] = useState(false);
   const [allPinned, setAllPinned] = useState(false);
   const [layout, setLayout] = useState<"vertical" | "horizontal">("horizontal");
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const { theme, toggleTheme, accentId, setAccent } = useTheme();
+  const { theme, toggleTheme, accentId, setAccent, customHex, setCustomAccent } = useTheme();
 
   // ── Profiles ───────────────────────────────────────────────────────
   interface Profile {
@@ -161,45 +162,33 @@ function App() {
   const applyLayoutSize = async (mode: "vertical" | "horizontal", forceResize = false) => {
     const win = getCurrentWindow();
     const factor = await win.scaleFactor();
-    if (mode === "horizontal") {
-      const minW = 1060;
-      const minH = 500;
-      const targetW = 1200;
-      const targetH = 700;
-      await win.setMinSize(new LogicalSize(minW, minH));
-      if (forceResize) {
-        await win.setSize(new LogicalSize(targetW, targetH));
-      } else {
-        // On startup: ensure current size meets minimum
-        const size = await win.innerSize();
-        const logW = Math.round(size.width / factor);
-        const logH = Math.round(size.height / factor);
-        if (logW < minW || logH < minH) {
-          await win.setSize(new LogicalSize(Math.max(logW, minW), Math.max(logH, minH)));
-        }
-      }
+    const { minW, minH, targetW: rawTargetW, targetH: rawTargetH } = LAYOUT_SIZES[mode];
+
+    await win.setMinSize(new LogicalSize(minW, minH));
+
+    if (forceResize) {
+      let targetW: number = rawTargetW;
+      let targetH: number = rawTargetH;
+      // Cap to 90% of screen logical size
+      const screenW = Math.floor(window.screen.width * 0.9);
+      const screenH = Math.floor(window.screen.height * 0.9);
+      targetW = Math.min(targetW, screenW);
+      targetH = Math.min(targetH, screenH);
+      console.log(`[layout] setSize ${targetW}x${targetH} (mode=${mode})`);
+      await win.setSize(new LogicalSize(targetW, targetH));
     } else {
-      const minW = 600;
-      const minH = 700;
-      const targetW = 900;
-      const targetH = 1030;
-      await win.setMinSize(new LogicalSize(minW, minH));
-      if (forceResize) {
-        await win.setSize(new LogicalSize(targetW, targetH));
-      } else {
-        const size = await win.innerSize();
-        const logW = Math.round(size.width / factor);
-        const logH = Math.round(size.height / factor);
-        if (logW < minW || logH < minH) {
-          await win.setSize(new LogicalSize(Math.max(logW, minW), Math.max(logH, minH)));
-        }
+      // On startup: ensure current size meets minimum
+      const size = await win.innerSize();
+      const logW = Math.round(size.width / factor);
+      const logH = Math.round(size.height / factor);
+      if (logW < minW || logH < minH) {
+        await win.setSize(new LogicalSize(Math.max(logW, minW), Math.max(logH, minH)));
       }
     }
   };
 
   const toggleLayout = async () => {
     const next = layout === "vertical" ? "horizontal" : "vertical";
-    setPreviewOpen(false);
     setLayout(next);
     await applyLayoutSize(next, true);
     const store = await load("settings.json", { autoSave: true, defaults: {} });
@@ -327,7 +316,7 @@ function App() {
     });
   }, [statuses]);
 
-  const handleStartAll = useCallback(async (forceSynced = false) => {
+  const handleStartAll = useCallback(async (forceSynced?: boolean) => {
     const allConfigs = await getAllMonitorConfigs();
 
     const perMonitor: { mid: string; paths: string[]; interval: number; mode: "Sequential" | "Shuffle" }[] = [];
@@ -614,7 +603,7 @@ function App() {
           )}
           {!anyRunning && !anyStopped && hasStoredConfigs && (
             <button
-              onClick={handleStartAll}
+              onClick={() => handleStartAll()}
               className="flex items-center gap-1.5 rounded-full border border-ds-accent/30 bg-ds-accent/10 px-3 py-1.5 text-xs font-medium text-ds-accent-light transition hover:bg-ds-accent/20"
             >
               <svg
@@ -635,7 +624,7 @@ function App() {
             <motion.button
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              onClick={handleStartAll}
+              onClick={() => handleStartAll()}
               className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 transition hover:bg-emerald-500/20"
             >
               <svg
@@ -745,6 +734,9 @@ function App() {
                 onToggleZen={handleToggleZen}
                 layout={layout}
               />
+              {layout === "horizontal" && selectedMon && (
+                <MonitorSource monitor={selectedMon} />
+              )}
             </div>
           )}
 
@@ -762,8 +754,6 @@ function App() {
                 onStop={stopWithSync}
                 onRefresh={refresh}
                 layout={layout}
-                previewOpen={previewOpen}
-                onPreviewToggle={setPreviewOpen}
                 profiles={profiles}
                 activeProfileId={activeProfileId}
                 onSaveProfile={handleSaveProfile}
@@ -801,6 +791,8 @@ function App() {
         onThemeChange={toggleTheme}
         accentId={accentId}
         onAccentChange={setAccent}
+        customHex={customHex}
+        onCustomAccentChange={setCustomAccent}
       />
 
       {/* Schedule modal */}

@@ -59,6 +59,24 @@ pub fn run() {
                 });
             }
 
+            // Cap window size to 90% of primary monitor
+            if let Some(window) = app.get_webview_window("main") {
+                if let Some(monitor) = window.primary_monitor().ok().flatten() {
+                    let size = monitor.size();
+                    let scale = monitor.scale_factor();
+                    let max_w = (size.width as f64 / scale * 0.9) as u32;
+                    let max_h = (size.height as f64 / scale * 0.9) as u32;
+                    let conf_w: u32 = 1081;
+                    let conf_h: u32 = 726;
+                    let w = conf_w.min(max_w);
+                    let h = conf_h.min(max_h);
+                    if w != conf_w || h != conf_h {
+                        let _ = window.set_size(tauri::LogicalSize::new(w, h));
+                        log::info!("Window capped to {}x{} (monitor {}x{} @{:.1}x)", w, h, size.width, size.height, scale);
+                    }
+                }
+            }
+
             // Handle --minimized flag (autostart scenario)
             let minimized = std::env::args().any(|a| a == "--minimized");
             if minimized {

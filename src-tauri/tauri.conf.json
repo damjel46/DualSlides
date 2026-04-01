@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "DualSlide",
-        "width": 1200,
-        "height": 700,
-        "minWidth": 1060,
-        "minHeight": 500,
+        "width": 1081,
+        "height": 726,
+        "minWidth": 1081,
+        "minHeight": 726,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,

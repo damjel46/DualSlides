@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
@@ -20,6 +20,151 @@ interface SettingsProps {
   onThemeChange?: () => void;
   accentId?: string;
   onAccentChange?: (id: string) => void;
+  customHex?: string | null;
+  onCustomAccentChange?: (hex: string) => void;
+}
+
+function CustomColorPicker({
+  accentId,
+  customHex,
+  onCustomAccentChange,
+}: {
+  accentId: string;
+  customHex: string | null | undefined;
+  onCustomAccentChange: (hex: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [hexInput, setHexInput] = useState(customHex || "#6366f1");
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  const parseHex = (hex: string) => {
+    const h = hex.replace("#", "");
+    if (h.length !== 6) return { r: 99, g: 102, b: 241 };
+    return {
+      r: parseInt(h.substring(0, 2), 16),
+      g: parseInt(h.substring(2, 4), 16),
+      b: parseInt(h.substring(4, 6), 16),
+    };
+  };
+
+  const rgbToHex = (r: number, g: number, b: number) =>
+    `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+
+  const currentRgb = parseHex(hexInput);
+
+  const applyHex = (hex: string) => {
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      setHexInput(hex);
+      onCustomAccentChange(hex);
+    }
+  };
+
+  const handleRgbChange = (channel: "r" | "g" | "b", val: string) => {
+    let n = parseInt(val, 10);
+    if (isNaN(n)) n = 0;
+    n = Math.max(0, Math.min(255, n));
+    const rgb = { ...currentRgb, [channel]: n };
+    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+    setHexInput(hex);
+    onCustomAccentChange(hex);
+  };
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [pickerOpen]);
+
+  useEffect(() => {
+    if (customHex) setHexInput(customHex);
+  }, [customHex]);
+
+  return (
+    <div className="relative" ref={pickerRef}>
+      <button
+        onClick={() => setPickerOpen(!pickerOpen)}
+        className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all ${
+          accentId === "custom"
+            ? "ring-2 ring-ds-text ring-offset-2 ring-offset-ds-card scale-110 border-transparent"
+            : "border-dashed border-ds-text-muted/40 hover:scale-110 hover:border-ds-text-muted"
+        }`}
+        style={accentId === "custom" && customHex ? { backgroundColor: customHex } : undefined}
+        title={t("settings.custom_color", { defaultValue: "Custom Color" })}
+      >
+        {accentId !== "custom" && (
+          <svg className="h-4 w-4 text-ds-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        )}
+      </button>
+
+      <AnimatePresence>
+        {pickerOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-10 right-0 z-50 w-56 rounded-xl border border-ds-border bg-ds-card p-4 shadow-xl shadow-black/30"
+          >
+            {/* Preview bar */}
+            <div
+              className="mb-3 h-8 w-full rounded-lg"
+              style={{ backgroundColor: hexInput }}
+            />
+
+            {/* HEX input */}
+            <div className="mb-3">
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">HEX</label>
+              <input
+                type="text"
+                value={hexInput}
+                onChange={(e) => {
+                  let v = e.target.value;
+                  if (!v.startsWith("#")) v = "#" + v;
+                  setHexInput(v);
+                  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    onCustomAccentChange(v);
+                  }
+                }}
+                onBlur={() => applyHex(hexInput)}
+                onKeyDown={(e) => e.key === "Enter" && applyHex(hexInput)}
+                maxLength={7}
+                className="w-full rounded-lg border border-ds-border bg-ds-bg/50 px-2.5 py-1.5 text-sm font-mono text-ds-text focus:border-ds-accent focus:outline-none"
+                placeholder="#6366f1"
+              />
+            </div>
+
+            {/* RGB inputs */}
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">RGB</label>
+              <div className="flex gap-2">
+                {(["r", "g", "b"] as const).map((ch) => (
+                  <div key={ch} className="flex-1">
+                    <div className="mb-0.5 text-center text-[9px] font-bold uppercase text-ds-text-muted/60">{ch}</div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={255}
+                      value={currentRgb[ch]}
+                      onChange={(e) => handleRgbChange(ch, e.target.value)}
+                      className="w-full rounded-lg border border-ds-border bg-ds-bg/50 px-1.5 py-1.5 text-center text-xs text-ds-text focus:border-ds-accent focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 function Toggle({
@@ -50,13 +195,15 @@ export function Settings({
   onClose,
   hotkeys,
   onUpdateHotkey,
-  monitorIds,
+  monitorIds: _monitorIds,
   activeTab: externalTab,
   onTabChange,
   theme,
   onThemeChange,
   accentId,
   onAccentChange,
+  customHex,
+  onCustomAccentChange,
 }: SettingsProps) {
   const { t, i18n } = useTranslation();
   const [autostart, setAutostart] = useState(false);
@@ -233,7 +380,7 @@ export function Settings({
                   {onAccentChange && (
                     <div className="space-y-2">
                       <span className="text-sm text-ds-text">{t("settings.accent_color", { defaultValue: "Accent Color" })}</span>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {[
                           { id: "cyan",    color: "#0891b2" },
                           { id: "blue",    color: "#2563eb" },
@@ -256,6 +403,14 @@ export function Settings({
                             title={c.id.charAt(0).toUpperCase() + c.id.slice(1)}
                           />
                         ))}
+                        {/* Custom color picker */}
+                        {onCustomAccentChange && (
+                          <CustomColorPicker
+                            accentId={accentId || "cyan"}
+                            customHex={customHex}
+                            onCustomAccentChange={onCustomAccentChange}
+                          />
+                        )}
                       </div>
                     </div>
                   )}
