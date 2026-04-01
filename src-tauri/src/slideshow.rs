@@ -159,9 +159,19 @@ impl SlideshowEngine {
                 old_sorted.sort();
                 new_sorted.sort();
 
-                if old_sorted == new_sorted {
-                    // Resume: keep the existing order and index
+                if old_sorted == new_sorted && ms.mode == mode {
+                    // Same images AND same mode: resume with existing order
                     (ms.images.clone(), ms.current_index.min(ms.images.len().saturating_sub(1)))
+                } else if old_sorted == new_sorted {
+                    // Same images but mode changed: re-sort
+                    let mut imgs = image_paths;
+                    if mode == SlideshowMode::Shuffle {
+                        let mut rng = rand::thread_rng();
+                        imgs.shuffle(&mut rng);
+                    } else {
+                        imgs.sort();
+                    }
+                    (imgs, 0)
                 } else {
                     // New images — shuffle if needed, start from 0
                     let mut imgs = image_paths;
@@ -239,16 +249,18 @@ impl SlideshowEngine {
                     map.get(&mid).map(|ms| ms.is_pinned).unwrap_or(false)
                 };
 
+                let tick_start = tokio::time::Instant::now();
+
                 if !pinned {
-                    // Apply wallpaper immediately
+                    // Apply wallpaper with fade transition
                     let wp_mid = mid.clone();
                     let wp_path = images[index % total].clone();
                     let wp_result = tokio::task::spawn_blocking(move || {
-                        monitor::set_wallpaper(&wp_mid, &wp_path)
+                        crate::fade::fade_and_set(&wp_mid, &wp_path)
                     }).await;
 
                     match wp_result {
-                        Ok(Err(e)) => log::error!("[{}] set_wallpaper failed: {}", mid, e),
+                        Ok(Err(e)) => log::error!("[{}] fade_and_set failed: {}", mid, e),
                         Err(e) => log::error!("[{}] spawn_blocking panic: {}", mid, e),
                         _ => {}
                     }
@@ -264,10 +276,30 @@ impl SlideshowEngine {
                     index += 1;
                 }
 
-                // Wait for interval or cancel
-                tokio::select! {
-                    _ = time::sleep(interval_dur) => {}
-                    _ = token.cancelled() => { break; }
+                // Preload next 2 images during wait
+                if !pinned {
+                    let pl_mid = mid.clone();
+                    let pl_imgs = images.clone();
+                    let pl_total = total;
+                    let pl_idx = index;
+                    tokio::task::spawn_blocking(move || {
+                        let mut preload_pairs = Vec::new();
+                        for offset in 0..2 {
+                            let i = (pl_idx + offset) % pl_total;
+                            preload_pairs.push((pl_mid.clone(), pl_imgs[i].clone()));
+                        }
+                        crate::fade::preload(&preload_pairs);
+                    });
+                }
+
+                // Wait remaining time (subtract compose/fade duration from interval)
+                let elapsed = tick_start.elapsed();
+                let remaining = interval_dur.saturating_sub(elapsed);
+                if !remaining.is_zero() {
+                    tokio::select! {
+                        _ = time::sleep(remaining) => {}
+                        _ = token.cancelled() => { break; }
+                    }
                 }
 
                 if token.is_cancelled() { break; }
@@ -541,17 +573,17 @@ impl SlideshowEngine {
         let entries: Vec<(String, Vec<String>)> = {
             let map = self.monitors.lock().unwrap();
             resume_indexes.iter().map(|(mid, new_images, _)| {
-                // If same image set exists in engine, use its order (preserves shuffle)
+                // If same image set AND same mode, use existing order (preserves shuffle)
                 if let Some(ms) = map.get(mid.as_str()) {
                     let mut old_sorted = ms.images.clone();
                     let mut new_sorted = new_images.clone();
                     old_sorted.sort();
                     new_sorted.sort();
-                    if old_sorted == new_sorted {
+                    if old_sorted == new_sorted && ms.mode == mode {
                         return (mid.clone(), ms.images.clone());
                     }
                 }
-                // New images — shuffle if needed
+                // New images or mode changed — re-sort
                 let mut imgs = new_images.clone();
                 if mode == SlideshowMode::Shuffle {
                     let mut rng = rand::thread_rng();
@@ -606,10 +638,8 @@ impl SlideshowEngine {
 
                 if !pairs.is_empty() {
                     let _ = tokio::task::spawn_blocking(move || {
-                        for (mid, path) in &pairs {
-                            if let Err(e) = monitor::set_wallpaper(mid, path) {
-                                log::error!("[{}] initial set_wallpaper failed: {}", mid, e);
-                            }
+                        if let Err(e) = crate::fade::fade_and_set_multi(&pairs) {
+                            log::error!("Initial fade_and_set_multi failed: {}", e);
                         }
                     }).await;
                 }
@@ -626,13 +656,20 @@ impl SlideshowEngine {
                 index += 1;
             }
 
+            let mut last_compose_duration = Duration::ZERO;
+
             loop {
-                // Wait for interval or cancel (no immediate first tick)
-                tokio::select! {
-                    _ = time::sleep(Duration::from_secs(interval_secs)) => {}
-                    _ = token.cancelled() => { break; }
+                // Wait for interval minus last compose time
+                let wait = Duration::from_secs(interval_secs).saturating_sub(last_compose_duration);
+                if !wait.is_zero() {
+                    tokio::select! {
+                        _ = time::sleep(wait) => {}
+                        _ = token.cancelled() => { break; }
+                    }
                 }
                 if token.is_cancelled() { break; }
+
+                let tick_start = tokio::time::Instant::now();
 
                 // Check which monitors are pinned
                 let pinned_set: std::collections::HashSet<String> = {
@@ -652,19 +689,13 @@ impl SlideshowEngine {
 
                 if !pairs.is_empty() {
                     let wp_result = tokio::task::spawn_blocking(move || {
-                        let mut errors = Vec::new();
-                        for (mid, path) in &pairs {
-                            if let Err(e) = monitor::set_wallpaper(mid, path) {
-                                errors.push((mid.clone(), e));
-                            }
-                        }
-                        errors
+                        crate::fade::fade_and_set_multi(&pairs)
                     }).await;
 
-                    if let Ok(errors) = wp_result {
-                        for (mid, e) in errors {
-                            log::error!("[{}] set_wallpaper failed: {}", mid, e);
-                        }
+                    match wp_result {
+                        Ok(Err(e)) => log::error!("fade_and_set_multi failed: {}", e),
+                        Err(e) => log::error!("spawn_blocking panic: {}", e),
+                        _ => {}
                     }
                 }
 
@@ -679,8 +710,26 @@ impl SlideshowEngine {
                     }
                 }
 
-
                 index += 1;
+                last_compose_duration = tick_start.elapsed();
+
+                // Preload next 2 images for all monitors during wait
+                {
+                    let pl_entries = entries.clone();
+                    let pl_idx = index;
+                    let pl_pinned = pinned_set.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let mut preload_pairs = Vec::new();
+                        for offset in 0..2 {
+                            for (mid, imgs) in &pl_entries {
+                                if pl_pinned.contains(mid) || imgs.is_empty() { continue; }
+                                let i = (pl_idx + offset) % imgs.len();
+                                preload_pairs.push((mid.clone(), imgs[i].clone()));
+                            }
+                        }
+                        crate::fade::preload(&preload_pairs);
+                    });
+                }
             }
 
             let mut map = monitors_state.lock().unwrap();
@@ -782,10 +831,8 @@ impl SlideshowEngine {
 
                 if !pairs.is_empty() {
                     let _ = tokio::task::spawn_blocking(move || {
-                        for (mid, path) in &pairs {
-                            if let Err(e) = monitor::set_wallpaper(mid, path) {
-                                log::error!("[{}] initial set_wallpaper failed: {}", mid, e);
-                            }
+                        if let Err(e) = crate::fade::fade_and_set_multi(&pairs) {
+                            log::error!("Initial fade_and_set_multi failed: {}", e);
                         }
                     }).await;
                 }
@@ -801,14 +848,19 @@ impl SlideshowEngine {
                 index += 1;
             }
 
-            loop {
-                // Wait for interval or cancel
-                tokio::select! {
-                    _ = time::sleep(Duration::from_secs(interval_secs)) => {}
-                    _ = token.cancelled() => { break; }
-                }
+            let mut last_compose_duration = Duration::ZERO;
 
+            loop {
+                let wait = Duration::from_secs(interval_secs).saturating_sub(last_compose_duration);
+                if !wait.is_zero() {
+                    tokio::select! {
+                        _ = time::sleep(wait) => {}
+                        _ = token.cancelled() => { break; }
+                    }
+                }
                 if token.is_cancelled() { break; }
+
+                let tick_start = tokio::time::Instant::now();
 
                 // Check which monitors are pinned
                 let pinned_set: std::collections::HashSet<String> = {
@@ -819,7 +871,6 @@ impl SlideshowEngine {
                         .collect()
                 };
 
-                // Set wallpapers for unpinned monitors
                 let pairs: Vec<(String, String)> = monitor_data
                     .iter()
                     .filter(|(mid, imgs)| !imgs.is_empty() && !pinned_set.contains(mid))
@@ -830,26 +881,16 @@ impl SlideshowEngine {
 
                 if !pairs.is_empty() {
                     let wp_result = tokio::task::spawn_blocking(move || {
-                        let mut errors = Vec::new();
-                        for (mid, path) in &pairs {
-                            if let Err(e) = monitor::set_wallpaper(mid, path) {
-                                errors.push((mid.clone(), e));
-                            }
-                        }
-                        errors
+                        crate::fade::fade_and_set_multi(&pairs)
                     }).await;
 
                     match wp_result {
-                        Ok(errors) => {
-                            for (mid, e) in errors {
-                                log::error!("[{}] set_wallpaper failed: {}", mid, e);
-                            }
-                        }
+                        Ok(Err(e)) => log::error!("fade_and_set_multi failed: {}", e),
                         Err(e) => log::error!("spawn_blocking panic: {}", e),
+                        _ => {}
                     }
                 }
 
-                // Update state for unpinned monitors
                 {
                     let mut map = monitors.lock().unwrap();
                     for (mid, images) in &monitor_data {
@@ -861,8 +902,26 @@ impl SlideshowEngine {
                     }
                 }
 
-
                 index += 1;
+                last_compose_duration = tick_start.elapsed();
+
+                // Preload next 2 images for all monitors
+                {
+                    let pl_data = monitor_data.clone();
+                    let pl_idx = index;
+                    let pl_pinned = pinned_set.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let mut preload_pairs = Vec::new();
+                        for offset in 0..2 {
+                            for (mid, imgs) in &pl_data {
+                                if pl_pinned.contains(mid) || imgs.is_empty() { continue; }
+                                let i = (pl_idx + offset) % imgs.len();
+                                preload_pairs.push((mid.clone(), imgs[i].clone()));
+                            }
+                        }
+                        crate::fade::preload(&preload_pairs);
+                    });
+                }
             }
 
             // Mark all stopped — only if our token is still active

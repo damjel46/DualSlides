@@ -12,7 +12,7 @@ import { ScheduleModal } from "./components/ScheduleModal";
 import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
-import { useAppConfig, syncIntervalFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
+import { useAppConfig, syncSettingsFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
 import { useTheme } from "./hooks/useTheme";
 import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
@@ -433,7 +433,7 @@ function App() {
     await setSync(next);
     if (next) {
       // Copy interval from the source monitor to all others
-      await syncIntervalFromMonitor(sourceMonitorId);
+      await syncSettingsFromMonitor(sourceMonitorId);
       // If multiple slideshows running, restart them in sync
       const runningCount = Object.values(statuses).filter(
         (s) => s.is_running,

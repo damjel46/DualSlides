@@ -36,9 +36,12 @@ pub fn cache_tauri_monitors(monitors: &[MonitorInfo]) {
         // it will rebuild on next set_wallpaper call from that thread
     }
     log::info!("Cached {} Tauri monitors for index mapping", monitors.len());
+
+    // Invalidate fade canvas when monitor config changes
+    crate::fade::invalidate_canvas();
 }
 
-fn get_cached_monitors() -> Vec<MonitorInfo> {
+pub fn get_cached_monitors() -> Vec<MonitorInfo> {
     TAURI_MONITORS.lock().unwrap().clone()
 }
 
@@ -160,6 +163,7 @@ mod win {
                 }
                 Err(e) => log::warn!("Could not init IDesktopWallpaper: {}", e),
             }
+
         }
     }
 

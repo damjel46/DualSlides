@@ -36,7 +36,7 @@
     "pause_all": "전체 일시정지",
     "resume_all": "전체 재개",
     "start_all": "전체 시작",
-    "sync_timers": "타이머 동기화",
+    "sync_settings": "설정 동기화",
     "apply": "적용"
   },
   "settings": {

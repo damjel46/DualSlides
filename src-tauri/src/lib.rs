@@ -1,4 +1,5 @@
 mod commands;
+mod fade;
 mod hotkey;
 mod monitor;
 mod profiles;

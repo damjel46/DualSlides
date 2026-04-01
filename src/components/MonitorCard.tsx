@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible } from "../lib/commands";
-import { useMonitorConfig, syncIntervalFromMonitor } from "../hooks/useMonitorConfig";
+import { useMonitorConfig, syncSettingsFromMonitor } from "../hooks/useMonitorConfig";
 import type {
   MonitorInfo,
   ImageInfo,
@@ -534,7 +534,7 @@ export function MonitorCard({
     }
     if (syncEnabled) {
       // Wait for store save, then sync to others
-      setTimeout(() => syncIntervalFromMonitor(monitor.id), 50);
+      setTimeout(() => syncSettingsFromMonitor(monitor.id), 50);
     }
   };
 
@@ -544,7 +544,7 @@ export function MonitorCard({
     if (v > MAX_INTERVAL) v = MAX_INTERVAL;
     update({ interval: v, customInput: String(v) });
     if (syncEnabled) {
-      setTimeout(() => syncIntervalFromMonitor(monitor.id), 50);
+      setTimeout(() => syncSettingsFromMonitor(monitor.id), 50);
     }
   };
 
@@ -783,7 +783,7 @@ export function MonitorCard({
             onChange={() => onSyncToggle(monitor.id)}
             className="h-3.5 w-3.5 accent-ds-accent"
           />
-          {t("slideshow.sync_timers")}
+          {t("slideshow.sync_settings")}
         </label>
 
         <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-ds-accent/50">
@@ -800,7 +800,7 @@ export function MonitorCard({
           <span className="text-xs text-ds-text-muted">{t("monitor.mode")}</span>
           <div className="flex rounded-lg overflow-hidden bg-ds-bg/50">
             <button
-              onClick={() => update({ mode: "Sequential" })}
+              onClick={() => { update({ mode: "Sequential" }); if (syncEnabled) setTimeout(() => syncSettingsFromMonitor(monitor.id), 50); }}
               className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
                 mode === "Sequential"
                   ? "bg-ds-accent text-white"
@@ -810,7 +810,7 @@ export function MonitorCard({
               {t("slideshow.sequential")}
             </button>
             <button
-              onClick={() => update({ mode: "Shuffle" })}
+              onClick={() => { update({ mode: "Shuffle" }); if (syncEnabled) setTimeout(() => syncSettingsFromMonitor(monitor.id), 50); }}
               className={`px-2.5 py-1.5 text-xs font-medium transition-all ${
                 mode === "Shuffle"
                   ? "bg-ds-accent text-white"

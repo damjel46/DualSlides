@@ -88,7 +88,8 @@ export function useMonitorConfig(monitorId: string) {
       } catch {
         // ignore
       }
-      saving.current = false;
+      // Delay resetting flag to prevent onKeyChange from overwriting
+      setTimeout(() => { saving.current = false; }, 100);
     })();
   }, [monitorId, config, ready]);
 
@@ -139,8 +140,8 @@ export async function getAllMonitorConfigs(): Promise<Record<string, MonitorConf
   return result;
 }
 
-/** Sync ONLY interval settings from one monitor to all others in the store */
-export async function syncIntervalFromMonitor(sourceMonitorId: string) {
+/** Sync interval + mode settings from one monitor to all others in the store */
+export async function syncSettingsFromMonitor(sourceMonitorId: string) {
   try {
     const store = await getStore();
     const source = await store.get<MonitorConfig>(sourceMonitorId);
@@ -151,12 +152,13 @@ export async function syncIntervalFromMonitor(sourceMonitorId: string) {
       if (!key.startsWith("monitor_") || key === sourceMonitorId) continue;
       const target = await store.get<MonitorConfig>(key);
       if (!target) continue;
-      // Only copy interval fields — never folder, images, excluded, etc.
+      // Copy interval + mode — never folder, images, excluded, etc.
       await store.set(key, {
         ...target,
         interval: source.interval,
         useCustom: source.useCustom,
         customInput: source.customInput,
+        mode: source.mode,
       });
     }
   } catch {
