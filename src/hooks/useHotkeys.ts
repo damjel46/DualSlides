@@ -5,15 +5,19 @@ import { load } from "@tauri-apps/plugin-store";
 export interface HotkeyBinding {
   action: string;
   shortcut: string;
+  enabled?: boolean;
 }
 
 const DEFAULT_HOTKEYS: HotkeyBinding[] = [
-  { action: "next_wallpaper", shortcut: "Ctrl+Alt+Right" },
-  { action: "prev_wallpaper", shortcut: "Ctrl+Alt+Left" },
   { action: "toggle_slideshow", shortcut: "Ctrl+Alt+P" },
   { action: "zen_mode", shortcut: "Ctrl+Alt+Z" },
-  { action: "pin_wallpaper", shortcut: "Ctrl+Alt+L" },
   { action: "favorite_current", shortcut: "Ctrl+Alt+F" },
+  { action: "profile_1", shortcut: "Ctrl+Alt+1" },
+  { action: "profile_2", shortcut: "Ctrl+Alt+2" },
+  { action: "profile_3", shortcut: "Ctrl+Alt+3" },
+  { action: "profile_4", shortcut: "Ctrl+Alt+4" },
+  { action: "profile_5", shortcut: "Ctrl+Alt+5" },
+  { action: "profile_6", shortcut: "Ctrl+Alt+6" },
 ];
 
 const STORE_FILE = "hotkeys.json";
@@ -44,7 +48,7 @@ export function useHotkeys(
           // Merge: use saved shortcuts but keep default actions/proOnly flags
           const merged = DEFAULT_HOTKEYS.map((def) => {
             const s = saved.find((h) => h.action === def.action);
-            return s ? { ...def, shortcut: s.shortcut } : def;
+            return s ? { ...def, shortcut: s.shortcut || def.shortcut, enabled: s.enabled } : def;
           });
           setHotkeys(merged);
         }
@@ -60,6 +64,7 @@ export function useHotkeys(
 
     const registerAll = async () => {
       for (const binding of hotkeys) {
+        if (binding.enabled === false) continue; // Skip disabled hotkeys
         try {
           await register(binding.shortcut, (event) => {
             if (event.state === "Pressed") {
@@ -84,16 +89,20 @@ export function useHotkeys(
 
   // Save + re-register on update
   const updateHotkey = useCallback(
-    async (action: string, newShortcut: string) => {
+    async (action: string, _shortcut: string) => {
+      // Toggle enabled state for the hotkey
       const existing = hotkeys.find((h) => h.action === action);
-      if (existing) {
-        try {
-          await unregister(existing.shortcut);
-        } catch { /* */ }
+      if (!existing) return;
+
+      const newEnabled = existing.enabled === false ? true : false;
+
+      // Unregister if disabling
+      if (!newEnabled) {
+        try { await unregister(existing.shortcut); } catch { /* */ }
       }
 
       const updated = hotkeys.map((h) =>
-        h.action === action ? { ...h, shortcut: newShortcut } : h,
+        h.action === action ? { ...h, enabled: newEnabled } : h,
       );
       setHotkeys(updated);
 

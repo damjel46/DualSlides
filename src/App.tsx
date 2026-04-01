@@ -18,10 +18,25 @@ import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, toggl
 import { load } from "@tauri-apps/plugin-store";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { LAYOUT_SIZES } from "./lib/layout";
+import { ToastProvider, toast } from "./components/Toast";
 import type { Schedule } from "./lib/commands";
 
 function App() {
   const { t } = useTranslation();
+
+  // Block browser refresh (Ctrl+R, F5) and context menu
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey && e.key === "r") || e.key === "F5") e.preventDefault();
+    };
+    const onCtx = (e: MouseEvent) => e.preventDefault();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("contextmenu", onCtx);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("contextmenu", onCtx);
+    };
+  }, []);
   const { monitors, loading } = useMonitors();
   const {
     statuses, startFiles, stop, next, prev, pause, syncRestart, refresh,
@@ -42,7 +57,7 @@ function App() {
   const [hasStoredConfigs, setHasStoredConfigs] = useState(false);
   const [zenActive, setZenActive] = useState(false);
   const [allPinned, setAllPinned] = useState(false);
-  const [layout, setLayout] = useState<"vertical" | "horizontal">("horizontal");
+  const [layout, setLayout] = useState<"vertical" | "horizontal" | null>(null);
   const { theme, toggleTheme, accentId, setAccent, customHex, setCustomAccent } = useTheme();
 
   // ── Profiles ───────────────────────────────────────────────────────
@@ -53,6 +68,9 @@ function App() {
     monitors: Record<string, {
       folders: string[];
       selectedFiles: string[];
+      excluded: string[];
+      favorites: string[];
+      images: { path: string; filename: string; size_bytes: number }[];
       interval: number;
       mode: "Sequential" | "Shuffle";
     }>;
@@ -75,28 +93,35 @@ function App() {
     await store.set("activeProfileId", activeId);
   };
 
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = async (name?: string, thumbOverride?: string | null) => {
     if (profiles.length >= 6) return;
+    const profileName = name?.trim() || `Profile ${profiles.length + 1}`;
+    if (!profileName) return;
+
     const allConfigs = await getAllMonitorConfigs();
-    const monitorsData: Record<string, { folders: string[]; selectedFiles: string[]; interval: number; mode: "Sequential" | "Shuffle" }> = {};
+    const monitorsData: Profile["monitors"] = {};
     for (const [mid, cfg] of Object.entries(allConfigs)) {
       const folders = cfg.folders && cfg.folders.length > 0 ? cfg.folders : cfg.folder ? [cfg.folder] : [];
       monitorsData[mid] = {
         folders,
         selectedFiles: cfg.selectedFiles || [],
+        excluded: cfg.excluded || [],
+        favorites: cfg.favorites || [],
+        images: cfg.images || [],
         interval: cfg.interval,
         mode: cfg.mode,
       };
     }
-    // Find a representative thumbnail from first monitor's first image
-    let thumbnail: string | null = null;
-    const firstCfg = Object.values(allConfigs)[0];
-    if (firstCfg?.images?.length > 0) {
-      thumbnail = firstCfg.images[0].path;
+    let thumbnail: string | null = thumbOverride !== undefined ? thumbOverride : null;
+    if (!thumbnail) {
+      const firstCfg = Object.values(allConfigs)[0];
+      if (firstCfg?.images?.length > 0) {
+        thumbnail = firstCfg.images[0].path;
+      }
     }
     const newProfile: Profile = {
       id: Date.now().toString(36),
-      name: `Profile ${profiles.length + 1}`,
+      name: profileName,
       thumbnail,
       monitors: monitorsData,
     };
@@ -104,27 +129,58 @@ function App() {
     setProfiles(updated);
     setActiveProfileId(newProfile.id);
     await persistProfiles(updated, newProfile.id);
+    toast(t("profile.saved"), "success");
   };
 
-  const handleLoadProfile = async (id: string) => {
+  const handleLoadProfile = async (id: string, _skipConfirm = false) => {
     const prof = profiles.find((p) => p.id === id);
     if (!prof) return;
     // Apply each monitor's config to the store
     const store = await load("monitor-configs.json", { autoSave: true, defaults: {} });
     for (const [mid, cfg] of Object.entries(prof.monitors)) {
       const existing = await store.get<Record<string, unknown>>(mid) || {};
+      // Profile's images array defines the playback order.
+      // If profile has images, use them (preserves saved order).
+      // If not (old profile), clear images so folder scan rebuilds fresh.
+      const profileImages = cfg.images && cfg.images.length > 0 ? cfg.images : [];
       await store.set(mid, {
         ...existing,
         folders: cfg.folders,
         selectedFiles: cfg.selectedFiles,
+        excluded: cfg.excluded || [],
+        favorites: cfg.favorites || [],
+        images: profileImages,
         interval: cfg.interval,
         mode: cfg.mode,
       });
     }
     setActiveProfileId(id);
     await persistProfiles(profiles, id);
-    // Restart slideshows with new config
     await handleStartAll();
+    toast(t("profile.applied", { name: prof.name }), "success");
+  };
+
+  const handleUpdateProfile = async (id: string) => {
+    const prof = profiles.find((p) => p.id === id);
+    if (!prof) return;
+    const allConfigs = await getAllMonitorConfigs();
+    const monitorsData: Profile["monitors"] = {};
+    for (const [mid, cfg] of Object.entries(allConfigs)) {
+      const folders = cfg.folders && cfg.folders.length > 0 ? cfg.folders : cfg.folder ? [cfg.folder] : [];
+      monitorsData[mid] = {
+        folders,
+        selectedFiles: cfg.selectedFiles || [],
+        excluded: cfg.excluded || [],
+        favorites: cfg.favorites || [],
+        images: cfg.images || [],
+        interval: cfg.interval,
+        mode: cfg.mode,
+      };
+    }
+    const updated = profiles.map((p) => p.id === id ? { ...p, monitors: monitorsData } : p);
+    setProfiles(updated);
+    await persistProfiles(updated, activeProfileId);
+    toast(t("profile.saved"), "success");
   };
 
   const handleDeleteProfile = async (id: string) => {
@@ -147,50 +203,66 @@ function App() {
     await persistProfiles(updated, activeProfileId);
   };
 
-  // Load saved layout preference
+  // Load saved layout + window size (single resize on startup)
   useEffect(() => {
-    load("settings.json", { autoSave: true, defaults: {} }).then(async (store) => {
-      const saved = await store.get<string>("layout");
-      if (saved === "vertical" || saved === "horizontal") {
-        setLayout(saved);
-        // On startup, force resize if saved layout differs from default (vertical)
-        await applyLayoutSize(saved, saved !== "horizontal");
+    (async () => {
+      try {
+        const store = await load("settings.json", { autoSave: true, defaults: {} });
+        const savedLayout = await store.get<string>("layout");
+        const savedW = await store.get<number>("windowWidth");
+        const savedH = await store.get<number>("windowHeight");
+        const initial = (savedLayout === "vertical" || savedLayout === "horizontal") ? savedLayout : "horizontal";
+        setLayout(initial);
+
+        const win = getCurrentWindow();
+        const { minW, minH, targetW, targetH } = LAYOUT_SIZES[initial];
+        await win.setMinSize(new LogicalSize(minW, minH));
+
+        // Use saved size if available, otherwise use layout default
+        const w = savedW && savedW >= minW ? savedW : targetW;
+        const h = savedH && savedH >= minH ? savedH : targetH;
+        const screenW = Math.floor(window.screen.width * 0.9);
+        const screenH = Math.floor(window.screen.height * 0.9);
+        await win.setSize(new LogicalSize(Math.min(w, screenW), Math.min(h, screenH)));
+      } catch {
+        setLayout("horizontal");
       }
-    }).catch(() => {});
+    })();
   }, []);
 
-  const applyLayoutSize = async (mode: "vertical" | "horizontal", forceResize = false) => {
-    const win = getCurrentWindow();
-    const factor = await win.scaleFactor();
-    const { minW, minH, targetW: rawTargetW, targetH: rawTargetH } = LAYOUT_SIZES[mode];
-
-    await win.setMinSize(new LogicalSize(minW, minH));
-
-    if (forceResize) {
-      let targetW: number = rawTargetW;
-      let targetH: number = rawTargetH;
-      // Cap to 90% of screen logical size
-      const screenW = Math.floor(window.screen.width * 0.9);
-      const screenH = Math.floor(window.screen.height * 0.9);
-      targetW = Math.min(targetW, screenW);
-      targetH = Math.min(targetH, screenH);
-      console.log(`[layout] setSize ${targetW}x${targetH} (mode=${mode})`);
-      await win.setSize(new LogicalSize(targetW, targetH));
-    } else {
-      // On startup: ensure current size meets minimum
-      const size = await win.innerSize();
-      const logW = Math.round(size.width / factor);
-      const logH = Math.round(size.height / factor);
-      if (logW < minW || logH < minH) {
-        await win.setSize(new LogicalSize(Math.max(logW, minW), Math.max(logH, minH)));
-      }
-    }
-  };
+  // Save window size on resize (debounced)
+  useEffect(() => {
+    let timer: number;
+    const onResize = () => {
+      clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        try {
+          const win = getCurrentWindow();
+          const factor = await win.scaleFactor();
+          const size = await win.innerSize();
+          const logW = Math.round(size.width / factor);
+          const logH = Math.round(size.height / factor);
+          const store = await load("settings.json", { autoSave: true, defaults: {} });
+          await store.set("windowWidth", logW);
+          await store.set("windowHeight", logH);
+        } catch {}
+      }, 500);
+    };
+    window.addEventListener("resize", onResize);
+    return () => { window.removeEventListener("resize", onResize); clearTimeout(timer); };
+  }, []);
 
   const toggleLayout = async () => {
-    const next = layout === "vertical" ? "horizontal" : "vertical";
+    const next = (layout || "horizontal") === "vertical" ? "horizontal" : "vertical";
     setLayout(next);
-    await applyLayoutSize(next, true);
+
+    const win = getCurrentWindow();
+    const { minW, minH, targetW, targetH } = LAYOUT_SIZES[next];
+    await win.setMinSize(new LogicalSize(minW, minH));
+    const screenW = Math.floor(window.screen.width * 0.9);
+    const screenH = Math.floor(window.screen.height * 0.9);
+    await win.setSize(new LogicalSize(Math.min(targetW, screenW), Math.min(targetH, screenH)));
+
     const store = await load("settings.json", { autoSave: true, defaults: {} });
     await store.set("layout", next);
   };
@@ -235,16 +307,27 @@ function App() {
 
   // ── Schedule: listen for slot changes from backend ──────────────────
   useEffect(() => {
-    const unlisten = listen<{ slot_index: number; slot_name: string; folders: Record<string, string[]> }>(
+    const unlisten = listen<{ slot_index: number; slot_name: string; profile_id: string | null; folders: Record<string, string[]> }>(
       "schedule-slot-changed",
       async (event) => {
-        const { folders } = event.payload;
-        const allConfigs = await getAllMonitorConfigs();
+        const { slot_name, profile_id, folders } = event.payload;
 
-        // Stop all current slideshows first
+        // If slot has a profile, load it
+        if (profile_id) {
+          const prof = profiles.find((p) => p.id === profile_id);
+          if (prof) {
+            await handleLoadProfile(prof.id, true);
+            toast(t("schedule.current", { name: slot_name }), "info");
+            return;
+          } else {
+            toast(t("schedule.profile_missing", { name: slot_name }), "warning");
+          }
+        }
+
+        // Direct folder mapping
+        const allConfigs = await getAllMonitorConfigs();
         await pause();
 
-        // For each monitor with folder mapping, scan all folders and restart slideshow
         for (const [mid, folderPaths] of Object.entries(folders)) {
           if (!folderPaths || folderPaths.length === 0) continue;
           try {
@@ -261,13 +344,15 @@ function App() {
             }
           } catch (e) {
             console.error(`Schedule: failed to apply folder for ${mid}:`, e);
+            toast(String(e), "error");
           }
         }
         await refresh();
+        toast(t("schedule.current", { name: slot_name }), "info");
       },
     );
     return () => { unlisten.then((fn) => fn()); };
-  }, [startFiles, refresh, pause]);
+  }, [startFiles, refresh, pause, profiles, handleLoadProfile, t]);
 
   // Track whether slideshow was running before zen mode
   const wasRunningBeforeZen = useRef(false);
@@ -401,6 +486,7 @@ function App() {
 
       const active = await toggleZenMode();
       setZenActive(active);
+      toast(active ? t("zen.enabled") : t("zen.disabled"), "info");
 
       if (active) {
         // Entering zen mode: save current slideshow state
@@ -417,6 +503,7 @@ function App() {
       }
     } catch (e) {
       console.error("Zen mode toggle failed:", e);
+      toast(String(e), "error");
     }
   }, [statuses, handleStartAll, pause]);
 
@@ -549,9 +636,19 @@ function App() {
         case "favorite_current":
           handleToggleFavoriteCurrent();
           break;
+        case "profile_1":
+        case "profile_2":
+        case "profile_3":
+        case "profile_4":
+        case "profile_5":
+        case "profile_6": {
+          const idx = parseInt(action.split("_")[1]) - 1;
+          if (profiles[idx]) handleLoadProfile(profiles[idx].id, true);
+          break;
+        }
       }
     },
-    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop, handleStartAll, handleToggleZen, handleTogglePin, handleToggleFavoriteCurrent],
+    [selectedMonitorId, statuses, nextWithSync, prevWithSync, stop, handleStartAll, handleToggleZen, handleTogglePin, handleToggleFavoriteCurrent, profiles, handleLoadProfile],
   );
 
   const { hotkeys, updateHotkey } = useHotkeys(handleHotkeyAction);
@@ -713,6 +810,11 @@ function App() {
       </header>
 
       {/* Main content */}
+      {!layout ? (
+        <main className="relative z-10 flex-1 flex items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-ds-accent border-t-transparent" />
+        </main>
+      ) : (
       <main className="relative z-10 flex-1 overflow-y-auto px-6 py-5">
         <div className={`mx-auto ${layout === "horizontal" ? "flex max-w-6xl gap-5 items-start" : "max-w-4xl space-y-5"}`}>
           {/* Loading */}
@@ -761,6 +863,7 @@ function App() {
                 onDeleteProfile={handleDeleteProfile}
                 onSetProfileThumbnail={handleSetProfileThumbnail}
                 onRenameProfile={handleRenameProfile}
+                onUpdateProfile={handleUpdateProfile}
               />
             ) : (
               !loading &&
@@ -777,6 +880,7 @@ function App() {
           </div>
         </div>
       </main>
+      )}
 
       {/* Settings modal */}
       <Settings
@@ -800,7 +904,9 @@ function App() {
         open={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
         monitorIds={monitors.map((m) => m.id)}
+        profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
       />
+      <ToastProvider />
     </div>
   );
 }

@@ -1,0 +1,132 @@
+{
+  "app": {
+    "name": "DualSlide",
+    "settings": "設定",
+    "quit": "終了",
+    "layout_vertical": "縦レイアウト",
+    "layout_horizontal": "横レイアウト"
+  },
+  "monitor": {
+    "primary": "メイン",
+    "folder": "フォルダを選択",
+    "files": "画像を選択",
+    "folder_images": "{{count}}枚",
+    "interval": "間隔",
+    "mode": "モード",
+    "preview": "プレビュー",
+    "preview_collapse": "折りたたむ",
+    "select_all": "全て選択",
+    "deselect_all": "全て解除",
+    "not_configured": "未設定",
+    "auto_refresh": "自動更新",
+    "add_folder": "フォルダ追加",
+    "add_images": "画像追加",
+    "hide_taskbar": "タスクバーを隠す",
+    "select_monitor": "上のモニターを選択して設定"
+  },
+  "slideshow": {
+    "sequential": "順次再生",
+    "shuffle": "シャッフル",
+    "play": "再生",
+    "pause": "一時停止",
+    "next": "次へ",
+    "prev": "前へ",
+    "running": "再生中",
+    "stopped": "停止",
+    "pause_all": "全て一時停止",
+    "resume_all": "全て再開",
+    "start_all": "全て開始",
+    "sync_settings": "設定同期",
+    "apply": "適用"
+  },
+  "settings": {
+    "autostart": "起動時に自動実行",
+    "close_to_tray": "閉じる時にトレイに最小化",
+    "language": "言語",
+    "hotkeys": "ショートカット",
+    "general": "一般",
+    "schedule": "スケジュール",
+    "language_auto": "システム設定",
+    "theme": "テーマ",
+    "dark": "ダーク",
+    "light": "ライト",
+    "accent_color": "アクセントカラー"
+  },
+  "zen": {
+    "toggle": "Zenモード",
+    "enabled": "Zenモード有効",
+    "disabled": "Zenモード無効",
+    "description": "タスクバーとアイコンを隠す"
+  },
+  "pin": {
+    "toggle": "壁紙を固定",
+    "pinned": "固定中",
+    "unpinned": "固定解除"
+  },
+  "favorite": {
+    "toggle": "お気に入り",
+    "add": "お気に入りに追加",
+    "remove": "お気に入りから削除",
+    "filter": "お気に入りのみ"
+  },
+  "profile": {
+    "name": "プロファイル名",
+    "save": "現在の設定をプロファイルとして保存",
+    "load": "プロファイル読込",
+    "rename": "名前変更",
+    "update": "現在の設定で更新",
+    "update_confirm": "プロファイル'{{name}}'を現在の設定で更新しますか？",
+    "delete": "プロファイル削除",
+    "load_confirm": "プロファイル'{{name}}'を読み込みますか？現在の設定が変更されます。",
+    "applied": "プロファイル'{{name}}'適用",
+    "saved": "プロファイル保存完了",
+    "max": "最大6つのプロファイル",
+    "thumbnail": "サムネイル",
+    "thumbnail_change": "クリックで変更",
+    "no_image": "画像なし",
+    "edit": "プロファイル編集"
+  },
+  "hotkeys": {
+    "next_wallpaper": "次の壁紙",
+    "prev_wallpaper": "前の壁紙",
+    "toggle_slideshow": "スライドショー切替",
+    "zen_mode": "Zenモード",
+    "pin_wallpaper": "壁紙固定",
+    "favorite_current": "現在の壁紙をお気に入り",
+    "profile_1": "プロファイル1",
+    "profile_2": "プロファイル2",
+    "profile_3": "プロファイル3",
+    "profile_4": "プロファイル4",
+    "profile_5": "プロファイル5",
+    "profile_6": "プロファイル6"
+  },
+  "schedule": {
+    "title": "スケジュール",
+    "enable": "スケジュール有効",
+    "add_slot": "時間枠追加",
+    "remove_slot": "削除",
+    "slot_name": "名前",
+    "start_time": "開始時間",
+    "current": "現在: {{name}}",
+    "max_slots": "最大6つの時間枠",
+    "select_folders": "各モニターのフォルダを選択",
+    "no_profile": "直接フォルダ指定",
+    "use_profile": "プロファイル使用",
+    "no_folders": "フォルダ未設定",
+    "change_folders": "変更",
+    "day": "昼",
+    "night": "夜",
+    "profile_missing": "スロット'{{name}}'のプロファイルが見つかりません"
+  },
+  "interval": {
+    "10s": "10秒",
+    "30s": "30秒",
+    "1m": "1分",
+    "5m": "5分",
+    "10m": "10分",
+    "30m": "30分",
+    "1h": "1時間",
+    "custom": "カスタム",
+    "seconds": "秒 (最大86400)"
+  }
+}

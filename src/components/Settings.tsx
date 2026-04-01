@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { updateTrayLocale } from "../lib/commands";
-import { HotkeyInput } from "./HotkeyInput";
+// HotkeyInput removed — hotkeys are now fixed with toggle on/off
 import type { HotkeyBinding } from "../hooks/useHotkeys";
 
 export type SettingsTab = "general" | "hotkeys";
@@ -111,7 +111,8 @@ function CustomColorPicker({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-10 right-0 z-50 w-56 rounded-xl border border-ds-border bg-ds-card p-4 shadow-xl shadow-black/30"
+            className="fixed z-[100] w-56 rounded-xl border border-ds-border bg-ds-card p-4 shadow-xl shadow-black/30"
+            style={{ top: Math.max(8, (pickerRef.current?.getBoundingClientRect().top ?? 200) - 280), left: (pickerRef.current?.getBoundingClientRect().left ?? 100) - 220 }}
           >
             {/* Preview bar */}
             <div
@@ -208,6 +209,15 @@ export function Settings({
   const { t, i18n } = useTranslation();
   const [autostart, setAutostart] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
+  const [langPref, setLangPref] = useState<string>(i18n.language);
+
+  // Load saved language preference
+  useEffect(() => {
+    import("@tauri-apps/plugin-store").then(m => m.load("settings.json", { autoSave: true, defaults: {} })).then(async (store) => {
+      const saved = await store.get<string>("language");
+      if (saved) setLangPref(saved);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     isEnabled().then(setAutostart).catch(() => {});
@@ -227,11 +237,21 @@ export function Settings({
   };
 
   const handleLanguageChange = async (lng: string) => {
-    await i18n.changeLanguage(lng);
-    try {
-      await updateTrayLocale(lng);
-    } catch (e) {
-      console.error("Failed to update tray locale:", e);
+    if (lng === "auto") {
+      // Detect system language and map to supported languages
+      const sysLng = navigator.language.split("-")[0]; // "ko-KR" → "ko"
+      const supported = ["en", "ko", "ja", "zh", "es"];
+      const resolved = supported.includes(sysLng) ? sysLng : "en";
+      await i18n.changeLanguage(resolved);
+      try { await updateTrayLocale(resolved); } catch {}
+      // Save "auto" preference
+      const store = await import("@tauri-apps/plugin-store").then(m => m.load("settings.json", { autoSave: true, defaults: {} }));
+      await store.set("language", "auto");
+    } else {
+      await i18n.changeLanguage(lng);
+      try { await updateTrayLocale(lng); } catch {}
+      const store = await import("@tauri-apps/plugin-store").then(m => m.load("settings.json", { autoSave: true, defaults: {} }));
+      await store.set("language", lng);
     }
   };
 
@@ -338,21 +358,21 @@ export function Settings({
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-ds-text">{t("settings.language")}</span>
                     <select
-                      value={i18n.language}
-                      onChange={(e) => handleLanguageChange(e.target.value)}
+                      value={langPref}
+                      onChange={(e) => { setLangPref(e.target.value); handleLanguageChange(e.target.value); }}
                       className="rounded-lg border border-ds-border bg-ds-bg/50 px-3 py-1.5 text-sm text-ds-text"
                     >
+                      <option value="auto">{t("settings.language_auto", { defaultValue: "System default" })}</option>
                       <option value="en">English</option>
                       <option value="ko">한국어</option>
                       <option value="ja">日本語</option>
                       <option value="zh">中文</option>
-                      <option value="de">Deutsch</option>
                       <option value="es">Español</option>
                     </select>
                   </div>
                   {onThemeChange && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-ds-text">{t("settings.theme", { defaultValue: "Theme" })}</span>
+                      <span className="text-sm text-ds-text">{t("settings.theme")}</span>
                       <button
                         onClick={onThemeChange}
                         className="flex items-center gap-2 rounded-lg border border-ds-border bg-ds-bg/50 px-3 py-1.5 text-sm text-ds-text transition hover:bg-ds-card-hover"
@@ -362,14 +382,14 @@ export function Settings({
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
                             </svg>
-                            Dark
+                            {t("settings.dark", { defaultValue: "Dark" })}
                           </>
                         ) : (
                           <>
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
                             </svg>
-                            Light
+                            {t("settings.light", { defaultValue: "Light" })}
                           </>
                         )}
                       </button>
@@ -378,9 +398,9 @@ export function Settings({
 
                   {/* Accent color picker */}
                   {onAccentChange && (
-                    <div className="space-y-2">
-                      <span className="text-sm text-ds-text">{t("settings.accent_color", { defaultValue: "Accent Color" })}</span>
-                      <div className="flex flex-wrap items-center gap-2">
+                    <div className="space-y-1">
+                      <span className="text-sm text-ds-text">{t("settings.accent_color")}</span>
+                      <div className="flex flex-wrap items-center gap-2 pt-2">
                         {[
                           { id: "cyan",    color: "#0891b2" },
                           { id: "blue",    color: "#2563eb" },
@@ -430,14 +450,17 @@ export function Settings({
                 <div className="space-y-2">
                   {hotkeys.map((binding) => (
                     <div key={binding.action} className="flex items-center justify-between">
-                      <span className="text-sm text-ds-text-dim">
-                        {t(`hotkeys.${binding.action}`, { defaultValue: binding.action.replace(/_/g, " ") })}
-                      </span>
-                      <HotkeyInput
-                        value={binding.shortcut}
-                        onChange={(shortcut) =>
-                          handleHotkeyChange(binding.action, shortcut)
-                        }
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-ds-text-dim">
+                          {t(`hotkeys.${binding.action}`, { defaultValue: binding.action.replace(/_/g, " ") })}
+                        </span>
+                        <span className="rounded bg-ds-bg/50 px-1.5 py-0.5 text-[10px] font-mono text-ds-text-muted">
+                          {binding.shortcut}
+                        </span>
+                      </div>
+                      <Toggle
+                        checked={binding.enabled !== false}
+                        onChange={() => handleHotkeyChange(binding.action, binding.shortcut)}
                       />
                     </div>
                   ))}

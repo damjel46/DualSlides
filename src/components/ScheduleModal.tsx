@@ -33,13 +33,19 @@ function Toggle({
   );
 }
 
+interface ProfileInfo {
+  id: string;
+  name: string;
+}
+
 interface ScheduleModalProps {
   open: boolean;
   onClose: () => void;
   monitorIds: string[];
+  profiles?: ProfileInfo[];
 }
 
-export function ScheduleModal({ open: isOpen, onClose, monitorIds }: ScheduleModalProps) {
+export function ScheduleModal({ open: isOpen, onClose, monitorIds, profiles = [] }: ScheduleModalProps) {
   const { t } = useTranslation();
   const [schedule, setSchedule] = useState<Schedule>({ enabled: false, slots: [] });
   const [activeSlotName, setActiveSlotName] = useState<string | null>(null);
@@ -228,7 +234,22 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds }: ScheduleMod
                       )}
                     </div>
 
-                    {/* Per-monitor folder mapping */}
+                    {/* Source: profile or direct folders */}
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={slot.profile_id || ""}
+                        onChange={(e) => handleSlotChange(idx, { profile_id: e.target.value || null })}
+                        className="flex-1 rounded-lg border border-ds-border bg-ds-bg/50 px-2.5 py-1.5 text-xs text-ds-text focus:border-ds-accent/50 focus:outline-none"
+                      >
+                        <option value="">{t("schedule.no_profile")}</option>
+                        {profiles.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Per-monitor folder mapping — only when no profile selected */}
+                    {!slot.profile_id && (
                     <div className="space-y-2">
                       <span className="text-xs text-ds-text-muted">{t("schedule.select_folders")}</span>
                       {monitorIds.map((mid, mIdx) => {
@@ -279,6 +300,7 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds }: ScheduleMod
                         );
                       })}
                     </div>
+                    )}
                   </div>
                 ))}
               </div>

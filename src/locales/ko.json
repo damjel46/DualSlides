@@ -45,7 +45,12 @@
     "language": "언어",
     "hotkeys": "단축키",
     "general": "일반",
-    "schedule": "스케줄"
+    "schedule": "스케줄",
+    "language_auto": "기기 설정",
+    "theme": "테마",
+    "dark": "다크",
+    "light": "라이트",
+    "accent_color": "강조 색상"
   },
   "zen": {
     "toggle": "감상 모드",
@@ -62,7 +67,25 @@
     "toggle": "즐겨찾기",
     "add": "즐겨찾기에 추가",
     "remove": "즐겨찾기에서 제거",
-    "filter": "즐겨찾기만"
+    "filter": "즐겨찾기만",
+    "play_only": "즐겨찾기만 재생"
+  },
+  "profile": {
+    "name": "프로필 이름",
+    "save": "현재 설정을 프로필로 저장",
+    "load": "프로필 로드",
+    "rename": "이름 변경",
+    "update": "현재 설정으로 업데이트",
+    "update_confirm": "프로필 '{{name}}'을(를) 현재 설정으로 업데이트하시겠습니까?",
+    "delete": "프로필 삭제",
+    "load_confirm": "프로필 '{{name}}'을(를) 로드하시겠습니까? 현재 설정이 변경됩니다.",
+    "applied": "프로필 '{{name}}' 적용됨",
+    "saved": "프로필 저장됨",
+    "max": "최대 6개 프로필",
+    "thumbnail": "썸네일",
+    "thumbnail_change": "클릭하여 변경",
+    "no_image": "이미지 없음",
+    "edit": "프로필 편집"
   },
   "hotkeys": {
     "next_wallpaper": "다음 배경화면",
@@ -70,7 +93,13 @@
     "toggle_slideshow": "슬라이드쇼 토글",
     "zen_mode": "감상 모드",
     "pin_wallpaper": "배경화면 고정",
-    "favorite_current": "현재 배경화면 즐겨찾기"
+    "favorite_current": "현재 배경화면 즐겨찾기",
+    "profile_1": "프로필 1",
+    "profile_2": "프로필 2",
+    "profile_3": "프로필 3",
+    "profile_4": "프로필 4",
+    "profile_5": "프로필 5",
+    "profile_6": "프로필 6"
   },
   "schedule": {
     "title": "스케줄",
@@ -87,7 +116,8 @@
     "no_folders": "폴더 미설정",
     "change_folders": "변경",
     "day": "낮",
-    "night": "밤"
+    "night": "밤",
+    "profile_missing": "슬롯 '{{name}}'의 프로필을 찾을 수 없습니다"
   },
   "interval": {
     "10s": "10초",

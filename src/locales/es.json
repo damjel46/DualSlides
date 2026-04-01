@@ -1,0 +1,132 @@
+{
+  "app": {
+    "name": "DualSlide",
+    "settings": "Ajustes",
+    "quit": "Salir",
+    "layout_vertical": "Diseño vertical",
+    "layout_horizontal": "Diseño horizontal"
+  },
+  "monitor": {
+    "primary": "Principal",
+    "folder": "Seleccionar carpeta",
+    "files": "Seleccionar imágenes",
+    "folder_images": "{{count}} imágenes",
+    "interval": "Intervalo",
+    "mode": "Modo",
+    "preview": "Vista previa",
+    "preview_collapse": "Contraer",
+    "select_all": "Seleccionar todo",
+    "deselect_all": "Deseleccionar todo",
+    "not_configured": "No configurado",
+    "auto_refresh": "Actualización automática",
+    "add_folder": "Agregar carpeta",
+    "add_images": "Agregar imágenes",
+    "hide_taskbar": "Ocultar barra de tareas",
+    "select_monitor": "Seleccione un monitor arriba para configurar"
+  },
+  "slideshow": {
+    "sequential": "Secuencial",
+    "shuffle": "Aleatorio",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "next": "Siguiente",
+    "prev": "Anterior",
+    "running": "Reproduciendo",
+    "stopped": "Detenido",
+    "pause_all": "Pausar todo",
+    "resume_all": "Reanudar todo",
+    "start_all": "Iniciar todo",
+    "sync_settings": "Sincronizar ajustes",
+    "apply": "Aplicar"
+  },
+  "settings": {
+    "autostart": "Iniciar con el sistema",
+    "close_to_tray": "Minimizar a bandeja al cerrar",
+    "language": "Idioma",
+    "hotkeys": "Atajos de teclado",
+    "general": "General",
+    "schedule": "Programación",
+    "language_auto": "Predeterminado del sistema",
+    "theme": "Tema",
+    "dark": "Oscuro",
+    "light": "Claro",
+    "accent_color": "Color de acento"
+  },
+  "zen": {
+    "toggle": "Modo Zen",
+    "enabled": "Modo Zen activado",
+    "disabled": "Modo Zen desactivado",
+    "description": "Ocultar barra de tareas e iconos"
+  },
+  "pin": {
+    "toggle": "Fijar fondo",
+    "pinned": "Fijado",
+    "unpinned": "Desfijado"
+  },
+  "favorite": {
+    "toggle": "Favorito",
+    "add": "Añadido a favoritos",
+    "remove": "Eliminado de favoritos",
+    "filter": "Solo favoritos"
+  },
+  "profile": {
+    "name": "Nombre del perfil",
+    "save": "Guardar configuración actual como perfil",
+    "load": "Cargar perfil",
+    "rename": "Renombrar",
+    "update": "Actualizar con configuración actual",
+    "update_confirm": "¿Actualizar perfil '{{name}}' con la configuración actual?",
+    "delete": "Eliminar perfil",
+    "load_confirm": "¿Cargar perfil '{{name}}'? La configuración actual será reemplazada.",
+    "applied": "Perfil '{{name}}' aplicado",
+    "saved": "Perfil guardado",
+    "max": "Máximo 6 perfiles",
+    "thumbnail": "Miniatura",
+    "thumbnail_change": "Clic para cambiar",
+    "no_image": "Sin imagen",
+    "edit": "Editar perfil"
+  },
+  "hotkeys": {
+    "next_wallpaper": "Siguiente fondo",
+    "prev_wallpaper": "Fondo anterior",
+    "toggle_slideshow": "Alternar presentación",
+    "zen_mode": "Modo Zen",
+    "pin_wallpaper": "Fijar fondo",
+    "favorite_current": "Favorito actual",
+    "profile_1": "Perfil 1",
+    "profile_2": "Perfil 2",
+    "profile_3": "Perfil 3",
+    "profile_4": "Perfil 4",
+    "profile_5": "Perfil 5",
+    "profile_6": "Perfil 6"
+  },
+  "schedule": {
+    "title": "Programación",
+    "enable": "Activar programación",
+    "add_slot": "Agregar horario",
+    "remove_slot": "Eliminar",
+    "slot_name": "Nombre",
+    "start_time": "Hora de inicio",
+    "current": "Actual: {{name}}",
+    "max_slots": "Máximo 6 horarios",
+    "select_folders": "Seleccionar carpetas para cada monitor",
+    "no_profile": "Asignación directa de carpetas",
+    "use_profile": "Usar perfil",
+    "no_folders": "Sin carpetas configuradas",
+    "change_folders": "Cambiar",
+    "day": "Día",
+    "night": "Noche",
+    "profile_missing": "Perfil no encontrado para el horario '{{name}}'"
+  },
+  "interval": {
+    "10s": "10 seg",
+    "30s": "30 seg",
+    "1m": "1 min",
+    "5m": "5 min",
+    "10m": "10 min",
+    "30m": "30 min",
+    "1h": "1 hora",
+    "custom": "Personalizado",
+    "seconds": "seg (máx 86400)"
+  }
+}

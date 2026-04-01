@@ -293,11 +293,12 @@ interface MonitorCardProps {
   layout?: "vertical" | "horizontal";
   profiles: Profile[];
   activeProfileId: string | null;
-  onSaveProfile: () => void;
-  onLoadProfile: (id: string) => void;
+  onSaveProfile: (name?: string, thumbnail?: string | null) => void;
+  onLoadProfile: (id: string, skipConfirm?: boolean) => void;
   onDeleteProfile: (id: string) => void;
   onSetProfileThumbnail: (id: string, path: string) => void;
   onRenameProfile: (id: string, name: string) => void;
+  onUpdateProfile: (id: string) => void;
 }
 
 const PRESETS = [
@@ -326,12 +327,23 @@ export function MonitorCard({
   onSaveProfile,
   onLoadProfile,
   onDeleteProfile,
-  onSetProfileThumbnail: _onSetProfileThumbnail,
-  onRenameProfile: _onRenameProfile,
+  onSetProfileThumbnail,
+  onRenameProfile,
+  onUpdateProfile,
 }: MonitorCardProps) {
   const { t } = useTranslation();
   const { config, update, loaded } = useMonitorConfig(monitor.id);
   const [taskbarHidden, setTaskbarHidden] = useState(false);
+  const [profileMenu, setProfileMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [profileEdit, setProfileEdit] = useState<{ id: string | null; name: string; thumbnail: string | null; isNew?: boolean } | null>(null);
+
+  // Close profile context menu on click outside
+  useEffect(() => {
+    if (!profileMenu) return;
+    const close = () => setProfileMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [profileMenu]);
 
   // Read initial taskbar visibility
   const monitorIndex = parseInt(monitor.id.replace("monitor_", ""), 10);
@@ -358,18 +370,22 @@ export function MonitorCard({
     folder, folders: foldersArr, selectedFiles, images, excluded: excludedArr, favorites: favoritesArr,
     selectionMode: _selectionMode, interval, useCustom, customInput, mode,
   } = config;
-  const excluded = new Set(excludedArr);
-  const favorites = new Set(favoritesArr);
+  const excluded = new Set(excludedArr || []);
+  const favorites = new Set(favoritesArr || []);
 
   // Compute effective interval once for use everywhere
   const effectiveInterval = useCustom ? Math.max(1, Math.min(MAX_INTERVAL, Number(customInput) || interval)) : interval;
 
   // Build the image path list that would be used if we started/applied now
   const buildActivePaths = () => {
-    const activePaths = images
+    let activePaths = images
       .filter((img) => !excluded.has(img.path))
       .map((img) => img.path);
-    if (mode === "Shuffle" && favorites.size > 0) {
+    // Favorites only mode: play only favorited images
+    if (filterFavorites && favorites.size > 0) {
+      activePaths = activePaths.filter((p) => favorites.has(p));
+    }
+    if (mode === "Shuffle" && favorites.size > 0 && !filterFavorites) {
       const extras: string[] = [];
       for (const p of activePaths) {
         if (favorites.has(p)) extras.push(p, p);
@@ -821,21 +837,18 @@ export function MonitorCard({
             </button>
           </div>
 
-          {/* Apply settings button — always visible, disabled when no changes */}
-          <button
-            onClick={handleApplySettings}
-            disabled={!settingsChanged}
-            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-              settingsChanged
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
-                : "border-ds-border bg-ds-card text-ds-text-muted cursor-not-allowed opacity-50"
-            }`}
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            {t("slideshow.apply")}
-          </button>
+          {favorites.size > 0 && (
+            <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-red-400/30">
+              <input
+                type="checkbox"
+                checked={filterFavorites}
+                onChange={() => setFilterFavorites(!filterFavorites)}
+                className="h-3.5 w-3.5 accent-red-500"
+              />
+              {t("favorite.filter")}
+            </label>
+          )}
+
         </div>
         </div>
       </div>
@@ -850,13 +863,13 @@ export function MonitorCard({
               <button
                 key={prof.id}
                 onClick={() => onLoadProfile(prof.id)}
-                onContextMenu={(e) => { e.preventDefault(); onDeleteProfile(prof.id); }}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setProfileMenu({ id: prof.id, x: e.clientX, y: e.clientY }); }}
                 className={`relative flex h-10 w-14 items-center justify-center overflow-hidden rounded-lg border transition active:scale-90 ${
                   activeProfileId === prof.id
                     ? "border-ds-accent bg-ds-accent/10"
                     : "border-ds-border bg-ds-card hover:border-ds-accent/30"
                 }`}
-                title={`${prof.name} (right-click to delete)`}
+                title={`${prof.name} (Ctrl+Alt+${i + 1})`}
               >
                 {prof.thumbnail ? (
                   <img src={convertFileSrc(prof.thumbnail)} className="absolute inset-0 h-full w-full object-cover opacity-30" alt="" />
@@ -866,9 +879,9 @@ export function MonitorCard({
             ) : (
               <button
                 key={`add-l-${i}`}
-                onClick={onSaveProfile}
+                onClick={() => setProfileEdit({ id: null, name: `Profile ${profiles.length + 1}`, thumbnail: null, isNew: true })}
                 className="flex h-10 w-14 items-center justify-center rounded-lg border border-dashed border-ds-border/30 text-ds-text-muted/30 transition hover:border-ds-accent/20 hover:text-ds-accent-light/50 active:scale-90"
-                title={t("profile.save", { defaultValue: "Save current as profile" })}
+                title={t("profile.save")}
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -878,10 +891,24 @@ export function MonitorCard({
           })}
         </div>
 
-        {/* Center play/pause */}
+        {/* Center play/pause/apply */}
         <div className="flex-1 flex justify-center">
         <AnimatePresence mode="wait">
-          {isRunning ? (
+          {settingsChanged ? (
+            <motion.button
+              key="apply"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={handleApplySettings}
+              className="flex h-12 min-w-[120px] items-center justify-center gap-2 rounded-xl bg-emerald-500/20 text-sm font-medium text-emerald-400 transition hover:bg-emerald-500/30"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {t("slideshow.apply")}
+            </motion.button>
+          ) : isRunning ? (
             <motion.button
               key="pause"
               initial={{ scale: 0.9, opacity: 0 }}
@@ -922,13 +949,13 @@ export function MonitorCard({
               <button
                 key={prof.id}
                 onClick={() => onLoadProfile(prof.id)}
-                onContextMenu={(e) => { e.preventDefault(); onDeleteProfile(prof.id); }}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setProfileMenu({ id: prof.id, x: e.clientX, y: e.clientY }); }}
                 className={`relative flex h-10 w-14 items-center justify-center overflow-hidden rounded-lg border transition active:scale-90 ${
                   activeProfileId === prof.id
                     ? "border-ds-accent bg-ds-accent/10"
                     : "border-ds-border bg-ds-card hover:border-ds-accent/30"
                 }`}
-                title={`${prof.name} (right-click to delete)`}
+                title={`${prof.name} (Ctrl+Alt+${i + 1})`}
               >
                 {prof.thumbnail ? (
                   <img src={convertFileSrc(prof.thumbnail)} className="absolute inset-0 h-full w-full object-cover opacity-30" alt="" />
@@ -938,9 +965,9 @@ export function MonitorCard({
             ) : (
               <button
                 key={`add-r-${i}`}
-                onClick={onSaveProfile}
+                onClick={() => setProfileEdit({ id: null, name: `Profile ${profiles.length + 1}`, thumbnail: null, isNew: true })}
                 className="flex h-10 w-14 items-center justify-center rounded-lg border border-dashed border-ds-border/30 text-ds-text-muted/30 transition hover:border-ds-accent/20 hover:text-ds-accent-light/50 active:scale-90"
-                title={t("profile.save", { defaultValue: "Save current as profile" })}
+                title={t("profile.save")}
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -972,6 +999,111 @@ export function MonitorCard({
         </div>
       )}
       </div>
+
+      {/* Profile context menu */}
+      {profileMenu && (() => {
+        const prof = profiles.find((p) => p.id === profileMenu.id);
+        if (!prof) return null;
+        const menuH = 120;
+        const flipUp = profileMenu.y + menuH > window.innerHeight;
+        const posStyle = flipUp
+          ? { left: profileMenu.x, bottom: window.innerHeight - profileMenu.y }
+          : { left: profileMenu.x, top: profileMenu.y };
+        return (
+          <div
+            className="fixed z-50 min-w-[160px] rounded-lg border border-ds-border bg-ds-card py-1 shadow-xl"
+            style={posStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { setProfileEdit({ id: prof.id, name: prof.name, thumbnail: prof.thumbnail }); setProfileMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-ds-text hover:bg-white/5"
+            >
+              {t("profile.edit", { defaultValue: "Edit profile" })}
+            </button>
+            <button
+              onClick={() => { onUpdateProfile(prof.id); setProfileMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-ds-text hover:bg-white/5"
+            >
+              {t("profile.update", { defaultValue: "Update with current settings" })}
+            </button>
+            <div className="my-1 h-px bg-ds-border/50" />
+            <button
+              onClick={() => { onDeleteProfile(prof.id); setProfileMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
+            >
+              {t("profile.delete", { defaultValue: "Delete profile" })}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Profile edit modal */}
+      {profileEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setProfileEdit(null)}>
+          <div className="w-72 rounded-xl border border-ds-border bg-ds-card p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-sm font-semibold text-ds-text">{t("profile.edit")}</h3>
+
+            {/* Name */}
+            <label className="mb-1 block text-[10px] font-medium text-ds-text-muted">{t("profile.name")}</label>
+            <input
+              type="text"
+              value={profileEdit.name}
+              onChange={(e) => setProfileEdit({ ...profileEdit, name: e.target.value })}
+              className="mb-3 w-full rounded-lg border border-ds-border bg-ds-bg/50 px-2.5 py-1.5 text-xs text-ds-text focus:border-ds-accent/50 focus:outline-none"
+              autoFocus
+            />
+
+            {/* Thumbnail preview + change */}
+            <label className="mb-1 block text-[10px] font-medium text-ds-text-muted">{t("profile.thumbnail")}</label>
+            <div
+              className="mb-3 group relative h-28 w-full cursor-pointer overflow-hidden rounded-xl border border-ds-border bg-ds-bg/30"
+              onClick={async () => {
+                const { open } = await import("@tauri-apps/plugin-dialog");
+                const selected = await open({ multiple: false, filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "bmp", "webp"] }] });
+                if (selected && typeof selected === "string") {
+                  setProfileEdit({ ...profileEdit, thumbnail: selected });
+                }
+              }}
+            >
+              {profileEdit.thumbnail ? (
+                <img src={convertFileSrc(profileEdit.thumbnail)} className="h-full w-full object-cover" alt="" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-ds-text-muted">{t("profile.no_image")}</div>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
+                <span className="text-xs font-medium text-white">{t("profile.thumbnail_change")}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setProfileEdit(null)}
+                className="rounded-lg px-3 py-1.5 text-xs text-ds-text-muted hover:bg-white/5"
+              >
+                {t("app.cancel", { defaultValue: "Cancel" })}
+              </button>
+              <button
+                onClick={() => {
+                  if (profileEdit.name.trim()) {
+                    if (profileEdit.isNew) {
+                      onSaveProfile(profileEdit.name.trim(), profileEdit.thumbnail);
+                    } else if (profileEdit.id) {
+                      onRenameProfile(profileEdit.id, profileEdit.name.trim());
+                      onSetProfileThumbnail(profileEdit.id, profileEdit.thumbnail || "");
+                    }
+                  }
+                  setProfileEdit(null);
+                }}
+                className="rounded-lg bg-ds-accent/20 px-3 py-1.5 text-xs text-ds-accent-light hover:bg-ds-accent/30"
+              >
+                {t("app.save", { defaultValue: "Save" })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

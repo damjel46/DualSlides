@@ -11,7 +11,7 @@ export function MonitorSource({ monitor }: MonitorSourceProps) {
   const { t } = useTranslation();
   const { config, update, loaded } = useMonitorConfig(monitor.id);
 
-  const { folder, folders: foldersArr, selectedFiles, autoRefresh } = config;
+  const { folder, folders: foldersArr, selectedFiles, autoRefresh: _autoRefresh } = config;
   const folders = foldersArr && foldersArr.length > 0 ? foldersArr : folder ? [folder] : [];
 
   const handleAddFolder = async () => {

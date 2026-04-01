@@ -151,6 +151,7 @@ impl ScheduleEngine {
                         let _ = app.emit("schedule-slot-changed", SlotChangedPayload {
                             slot_index: i,
                             slot_name: slot.name.clone(),
+                            profile_id: slot.profile_id.clone(),
                             folders: slot.folders.clone(),
                         });
                     }
@@ -186,6 +187,7 @@ impl ScheduleEngine {
                             let _ = app.emit("schedule-slot-changed", SlotChangedPayload {
                                 slot_index: i,
                                 slot_name: slot.name.clone(),
+                                profile_id: slot.profile_id.clone(),
                                 folders: slot.folders.clone(),
                             });
                         }
@@ -212,6 +214,7 @@ impl ScheduleEngine {
 pub struct SlotChangedPayload {
     pub slot_index: usize,
     pub slot_name: String,
+    pub profile_id: Option<String>,
     pub folders: HashMap<String, Vec<String>>,
 }
 

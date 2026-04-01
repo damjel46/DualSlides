@@ -14,7 +14,6 @@ use tauri::Emitter;
 
 struct TrayStrings {
     settings: &'static str,
-    next: &'static str,
     pause: &'static str,
     play: &'static str,
     zen_mode: &'static str,
@@ -25,15 +24,34 @@ fn strings_for(locale: &str) -> TrayStrings {
     match locale {
         "ko" => TrayStrings {
             settings: "설정",
-            next: "다음",
             pause: "일시정지",
             play: "재생",
             zen_mode: "감상 모드",
             quit: "종료",
         },
+        "ja" => TrayStrings {
+            settings: "設定",
+            pause: "一時停止",
+            play: "再生",
+            zen_mode: "Zenモード",
+            quit: "終了",
+        },
+        "zh" => TrayStrings {
+            settings: "设置",
+            pause: "暂停",
+            play: "播放",
+            zen_mode: "沉浸模式",
+            quit: "退出",
+        },
+        "es" => TrayStrings {
+            settings: "Ajustes",
+            pause: "Pausar",
+            play: "Reproducir",
+            zen_mode: "Modo Zen",
+            quit: "Salir",
+        },
         _ => TrayStrings {
             settings: "Settings",
-            next: "Next",
             pause: "Pause",
             play: "Play",
             zen_mode: "Zen Mode",
@@ -79,7 +97,6 @@ pub fn build_tray(app: &AppHandle, locale: &str) -> Result<(), Box<dyn std::erro
     };
 
     let settings_item = MenuItem::with_id(app, "settings", s.settings, true, None::<&str>)?;
-    let next_item = MenuItem::with_id(app, "next_all", s.next, true, None::<&str>)?;
     let toggle_item = MenuItem::with_id(app, toggle_id, toggle_label, true, None::<&str>)?;
     let zen_item = MenuItem::with_id(app, "zen", &zen_label, true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
@@ -87,7 +104,7 @@ pub fn build_tray(app: &AppHandle, locale: &str) -> Result<(), Box<dyn std::erro
 
     let menu = Menu::with_items(
         app,
-        &[&settings_item, &next_item, &toggle_item, &zen_item, &separator, &quit_item],
+        &[&settings_item, &toggle_item, &zen_item, &separator, &quit_item],
     )?;
 
     // Remove existing tray icons before rebuilding
@@ -119,16 +136,6 @@ fn handle_menu_event(app: &AppHandle<Wry>, event: MenuEvent) {
     match event.id.as_ref() {
         "settings" => {
             show_main_window(app);
-        }
-        "next_all" => {
-            if let Some(engine) = app.try_state::<SlideshowEngine>() {
-                let ids: Vec<String> = engine.get_status().keys().cloned().collect();
-                for mid in ids {
-                    if let Err(e) = engine.next_wallpaper(&mid) {
-                        log::error!("Tray next_all [{}]: {}", mid, e);
-                    }
-                }
-            }
         }
         "pause" => {
             if let Some(engine) = app.try_state::<SlideshowEngine>() {

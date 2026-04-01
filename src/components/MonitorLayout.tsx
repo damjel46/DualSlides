@@ -87,6 +87,9 @@ export function MonitorLayout({
   const scale = Math.min(availW / totalW, maxH / totalH);
   const shrink = 0.94;
 
+  // Detect if monitors are very wide (3+ monitors) and content needs to shrink
+  const isCompact = scale * Math.max(...monitors.map((m) => m.width)) < 160;
+
   const diagramW = totalW * scale + padding * 2;
   const diagramH = totalH * scale + padding * 2;
 
@@ -101,7 +104,7 @@ export function MonitorLayout({
               ? "bg-ds-accent/15 text-ds-accent-light border border-ds-accent/30"
               : "bg-ds-card text-ds-text-muted border border-ds-border hover:bg-ds-card-hover hover:text-ds-text"
           }`}
-          title={t("zen.description")}
+          title={`${t("zen.description")} (Ctrl+Alt+Z)`}
         >
           {/* Eye icon */}
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,34 +167,32 @@ export function MonitorLayout({
               )}
 
               {/* Overlay content */}
-              <div className="relative z-10 flex h-full flex-col items-center justify-center gap-1 p-2">
-                {/* Monitor label */}
-                <span className="text-[9px] font-medium uppercase tracking-wider text-ds-text-muted drop-shadow-sm">
-                  {t("monitor.label", { defaultValue: "Monitor" })}
-                </span>
-                <span className="text-sm font-semibold text-ds-text drop-shadow-sm">
+              <div className="relative z-10 flex h-full flex-col items-center justify-center gap-0.5 p-1">
+                {!isCompact && (
+                  <span className="text-[9px] font-medium uppercase tracking-wider text-ds-text-muted drop-shadow-sm">
+                    {t("monitor.label", { defaultValue: "Monitor" })}
+                  </span>
+                )}
+                <span className={`font-semibold text-ds-text drop-shadow-sm ${isCompact ? "text-[10px]" : "text-sm"}`}>
                   {monitor.name}
                 </span>
-                <span className="text-[10px] text-ds-text-dim drop-shadow-sm">
+                <span className={`text-ds-text-dim drop-shadow-sm ${isCompact ? "text-[8px]" : "text-[10px]"}`}>
                   {monitor.width}x{monitor.height}
                 </span>
 
                 {/* Badges */}
-                <div className="mt-1 flex items-center gap-1.5">
-                  {/* Status indicator dot */}
+                <div className={`flex items-center gap-1 ${isCompact ? "mt-0.5" : "mt-1"}`}>
                   {status && (
                     <span className={`inline-block h-1.5 w-1.5 rounded-full ${
-                      isRunning
-                        ? "bg-emerald-400"
-                        : "bg-slate-500"
+                      isRunning ? "bg-emerald-400" : "bg-slate-500"
                     }`} />
                   )}
                   {monitor.is_primary && (
-                    <span className="rounded bg-ds-accent/80 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    <span className={`rounded bg-ds-accent/80 font-bold text-white ${isCompact ? "px-1 py-px text-[7px]" : "px-1.5 py-0.5 text-[9px]"}`}>
                       {t("monitor.primary")}
                     </span>
                   )}
-                  {status ? (
+                  {!isCompact && status && (
                     <span
                       className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
                         isRunning
@@ -199,11 +200,10 @@ export function MonitorLayout({
                           : "bg-amber-500/20 text-amber-400"
                       }`}
                     >
-                      {isRunning
-                        ? t("slideshow.running")
-                        : t("slideshow.stopped")}
+                      {isRunning ? t("slideshow.running") : t("slideshow.stopped")}
                     </span>
-                  ) : (
+                  )}
+                  {!isCompact && !status && (
                     <span className="rounded bg-ds-border/50 px-1.5 py-0.5 text-[9px] text-ds-text-muted">
                       {t("monitor.not_configured")}
                     </span>

@@ -45,7 +45,12 @@
     "language": "Language",
     "hotkeys": "Hotkeys",
     "general": "General",
-    "schedule": "Schedule"
+    "schedule": "Schedule",
+    "language_auto": "System default",
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "accent_color": "Accent Color"
   },
   "zen": {
     "toggle": "Zen Mode",
@@ -62,7 +67,25 @@
     "toggle": "Favorite",
     "add": "Added to favorites",
     "remove": "Removed from favorites",
-    "filter": "Favorites only"
+    "filter": "Favorites only",
+    "play_only": "Favorites only"
+  },
+  "profile": {
+    "name": "Profile name",
+    "save": "Save current as profile",
+    "load": "Load profile",
+    "rename": "Rename",
+    "update": "Update with current settings",
+    "update_confirm": "Update profile '{{name}}' with current settings?",
+    "delete": "Delete profile",
+    "load_confirm": "Load profile '{{name}}'? Current settings will be replaced.",
+    "applied": "Profile '{{name}}' applied",
+    "saved": "Profile saved",
+    "max": "Maximum 6 profiles",
+    "thumbnail": "Thumbnail",
+    "thumbnail_change": "Click to change",
+    "no_image": "No image",
+    "edit": "Edit profile"
   },
   "hotkeys": {
     "next_wallpaper": "Next wallpaper",
@@ -70,7 +93,13 @@
     "toggle_slideshow": "Toggle slideshow",
     "zen_mode": "Zen Mode",
     "pin_wallpaper": "Pin Wallpaper",
-    "favorite_current": "Favorite Current"
+    "favorite_current": "Favorite Current",
+    "profile_1": "Profile 1",
+    "profile_2": "Profile 2",
+    "profile_3": "Profile 3",
+    "profile_4": "Profile 4",
+    "profile_5": "Profile 5",
+    "profile_6": "Profile 6"
   },
   "schedule": {
     "title": "Schedule",
@@ -87,7 +116,8 @@
     "no_folders": "No folders configured",
     "change_folders": "Change",
     "day": "Day",
-    "night": "Night"
+    "night": "Night",
+    "profile_missing": "Profile not found for slot '{{name}}'"
   },
   "interval": {
     "10s": "10 sec",

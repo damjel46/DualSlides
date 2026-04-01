@@ -1,0 +1,132 @@
+{
+  "app": {
+    "name": "DualSlide",
+    "settings": "设置",
+    "quit": "退出",
+    "layout_vertical": "垂直布局",
+    "layout_horizontal": "水平布局"
+  },
+  "monitor": {
+    "primary": "主显示器",
+    "folder": "选择文件夹",
+    "files": "选择图片",
+    "folder_images": "{{count}}张图片",
+    "interval": "间隔",
+    "mode": "模式",
+    "preview": "预览",
+    "preview_collapse": "折叠",
+    "select_all": "全选",
+    "deselect_all": "全部取消",
+    "not_configured": "未配置",
+    "auto_refresh": "自动刷新",
+    "add_folder": "添加文件夹",
+    "add_images": "添加图片",
+    "hide_taskbar": "隐藏任务栏",
+    "select_monitor": "选择上方的显示器进行配置"
+  },
+  "slideshow": {
+    "sequential": "顺序播放",
+    "shuffle": "随机播放",
+    "play": "播放",
+    "pause": "暂停",
+    "next": "下一张",
+    "prev": "上一张",
+    "running": "播放中",
+    "stopped": "已停止",
+    "pause_all": "全部暂停",
+    "resume_all": "全部恢复",
+    "start_all": "全部开始",
+    "sync_settings": "同步设置",
+    "apply": "应用"
+  },
+  "settings": {
+    "autostart": "开机自启",
+    "close_to_tray": "关闭时最小化到托盘",
+    "language": "语言",
+    "hotkeys": "快捷键",
+    "general": "常规",
+    "schedule": "定时计划",
+    "language_auto": "系统默认",
+    "theme": "主题",
+    "dark": "深色",
+    "light": "浅色",
+    "accent_color": "强调色"
+  },
+  "zen": {
+    "toggle": "沉浸模式",
+    "enabled": "沉浸模式已开启",
+    "disabled": "沉浸模式已关闭",
+    "description": "隐藏任务栏和桌面图标"
+  },
+  "pin": {
+    "toggle": "锁定壁纸",
+    "pinned": "已锁定",
+    "unpinned": "已解锁"
+  },
+  "favorite": {
+    "toggle": "收藏",
+    "add": "已添加到收藏",
+    "remove": "已从收藏移除",
+    "filter": "仅显示收藏"
+  },
+  "profile": {
+    "name": "配置名称",
+    "save": "将当前设置保存为配置",
+    "load": "加载配置",
+    "rename": "重命名",
+    "update": "用当前设置更新",
+    "update_confirm": "用当前设置更新配置'{{name}}'？",
+    "delete": "删除配置",
+    "load_confirm": "加载配置'{{name}}'？当前设置将被替换。",
+    "applied": "配置'{{name}}'已应用",
+    "saved": "配置已保存",
+    "max": "最多6个配置",
+    "thumbnail": "缩略图",
+    "thumbnail_change": "点击更换",
+    "no_image": "无图片",
+    "edit": "编辑配置"
+  },
+  "hotkeys": {
+    "next_wallpaper": "下一张壁纸",
+    "prev_wallpaper": "上一张壁纸",
+    "toggle_slideshow": "切换幻灯片",
+    "zen_mode": "沉浸模式",
+    "pin_wallpaper": "锁定壁纸",
+    "favorite_current": "收藏当前壁纸",
+    "profile_1": "配置1",
+    "profile_2": "配置2",
+    "profile_3": "配置3",
+    "profile_4": "配置4",
+    "profile_5": "配置5",
+    "profile_6": "配置6"
+  },
+  "schedule": {
+    "title": "定时计划",
+    "enable": "启用定时计划",
+    "add_slot": "添加时间段",
+    "remove_slot": "删除",
+    "slot_name": "名称",
+    "start_time": "开始时间",
+    "current": "当前: {{name}}",
+    "max_slots": "最多6个时间段",
+    "select_folders": "为每个显示器选择文件夹",
+    "no_profile": "直接指定文件夹",
+    "use_profile": "使用配置",
+    "no_folders": "未配置文件夹",
+    "change_folders": "更改",
+    "day": "白天",
+    "night": "夜晚",
+    "profile_missing": "未找到时间段'{{name}}'的配置"
+  },
+  "interval": {
+    "10s": "10秒",
+    "30s": "30秒",
+    "1m": "1分钟",
+    "5m": "5分钟",
+    "10m": "10分钟",
+    "30m": "30分钟",
+    "1h": "1小时",
+    "custom": "自定义",
+    "seconds": "秒 (最大86400)"
+  }
+}
