@@ -79,11 +79,14 @@ pub fn run() {
             }
 
             // Handle --minimized flag (autostart scenario)
+            // Window starts hidden (visible:false in tauri.conf.json) to prevent flash on boot.
             let minimized = std::env::args().any(|a| a == "--minimized");
-            if minimized {
+            if !minimized {
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.hide();
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
+            } else {
                 log::info!("Started minimized to tray (--minimized flag)");
             }
 

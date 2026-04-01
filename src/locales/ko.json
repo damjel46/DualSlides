@@ -111,7 +111,7 @@
     "current": "현재: {{name}}",
     "max_slots": "최대 6개 시간대",
     "select_folders": "모니터별 폴더를 선택하세요",
-    "no_profile": "직접 폴더 지정",
+    "no_profile": "프로필 지정",
     "use_profile": "프로필 사용",
     "no_folders": "폴더 미설정",
     "change_folders": "변경",

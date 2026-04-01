@@ -110,7 +110,7 @@
     "current": "現在: {{name}}",
     "max_slots": "最大6つの時間枠",
     "select_folders": "各モニターのフォルダを選択",
-    "no_profile": "直接フォルダ指定",
+    "no_profile": "プロファイル指定",
     "use_profile": "プロファイル使用",
     "no_folders": "フォルダ未設定",
     "change_folders": "変更",

@@ -4,6 +4,9 @@ use std::sync::Mutex;
 static ZEN_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Tracks whether we triggered "Show Desktop" so we can undo it
 static WINDOWS_HIDDEN: AtomicBool = AtomicBool::new(false);
+/// Tracks which taskbars were already hidden BEFORE zen mode was entered,
+/// so we don't restore them when zen mode exits.
+static PRE_ZEN_HIDDEN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
 // ── Windows implementation ───────────────────────────────────────────
 
@@ -176,6 +179,18 @@ pub fn toggle(monitors: &[(usize, i32, i32, u32, u32)]) -> Result<bool, String> 
     let new_state = !ZEN_ACTIVE.load(Ordering::SeqCst);
 
     if new_state {
+        // Save which taskbars are already hidden before zen mode
+        {
+            let mut pre = PRE_ZEN_HIDDEN.lock().unwrap();
+            pre.clear();
+            for &(idx, mx, my, mw, mh) in monitors {
+                if !crate::taskbar::get_taskbar_visible(idx, mx, my, mw, mh) {
+                    pre.push(idx);
+                }
+            }
+            log::info!("Pre-zen hidden taskbars: {:?}", *pre);
+        }
+
         // Enable: hide taskbars + icons first, then minimize windows
         for &(idx, mx, my, mw, mh) in monitors {
             let _ = crate::taskbar::set_taskbar_visible(idx, mx, my, mw, mh, false);
@@ -194,7 +209,9 @@ pub fn toggle(monitors: &[(usize, i32, i32, u32, u32)]) -> Result<bool, String> 
             std::thread::sleep(std::time::Duration::from_millis(300));
         }
 
-        crate::taskbar::restore_all(monitors);
+        // Only restore taskbars that were NOT already hidden before zen mode
+        let pre_hidden = PRE_ZEN_HIDDEN.lock().unwrap().clone();
+        crate::taskbar::restore_except(monitors, &pre_hidden);
         win::set_desktop_icons_visible(true);
         win::restore_cursor();
     }
@@ -217,8 +234,9 @@ pub fn is_active() -> bool {
 #[cfg(target_os = "windows")]
 pub fn restore_on_exit(monitors: &[(usize, i32, i32, u32, u32)]) {
     if ZEN_ACTIVE.load(Ordering::SeqCst) {
-        // Restore taskbars first so Show Desktop undo works
-        crate::taskbar::restore_all(monitors);
+        // Only restore taskbars that were visible before zen mode
+        let pre_hidden = PRE_ZEN_HIDDEN.lock().unwrap().clone();
+        crate::taskbar::restore_except(monitors, &pre_hidden);
         std::thread::sleep(std::time::Duration::from_millis(200));
 
         if WINDOWS_HIDDEN.load(Ordering::SeqCst) {

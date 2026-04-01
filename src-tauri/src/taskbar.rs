@@ -180,3 +180,33 @@ pub fn restore_all(monitors: &[(usize, i32, i32, u32, u32)]) {
 
 #[cfg(not(target_os = "windows"))]
 pub fn restore_all(_monitors: &[(usize, i32, i32, u32, u32)]) {}
+
+/// Restore hidden taskbars EXCEPT those in the `keep_hidden` list.
+/// Used by zen mode to preserve taskbars that were manually hidden before zen mode.
+#[cfg(target_os = "windows")]
+pub fn restore_except(monitors: &[(usize, i32, i32, u32, u32)], keep_hidden: &[usize]) {
+    let hidden: Vec<usize> = {
+        let h = HIDDEN.lock().unwrap();
+        h.clone()
+    };
+
+    for &idx in &hidden {
+        if keep_hidden.contains(&idx) {
+            log::info!("Taskbar monitor_{}: kept hidden (was hidden before zen mode)", idx);
+            continue;
+        }
+        if let Some(&(_, mx, my, mw, mh)) = monitors.iter().find(|m| m.0 == idx) {
+            if let Some(hwnd) = win::find_taskbar_for_monitor(idx, mx, my, mw, mh) {
+                win::set_visible(hwnd, true);
+                log::info!("Taskbar restored: monitor_{}", idx);
+            }
+        }
+    }
+
+    // Only remove restored entries from HIDDEN; keep the ones that should stay hidden
+    let mut h = HIDDEN.lock().unwrap();
+    h.retain(|idx| keep_hidden.contains(idx));
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn restore_except(_monitors: &[(usize, i32, i32, u32, u32)], _keep_hidden: &[usize]) {}

@@ -161,8 +161,6 @@ function App() {
   };
 
   const handleUpdateProfile = async (id: string) => {
-    const prof = profiles.find((p) => p.id === id);
-    if (!prof) return;
     const allConfigs = await getAllMonitorConfigs();
     const monitorsData: Profile["monitors"] = {};
     for (const [mid, cfg] of Object.entries(allConfigs)) {
@@ -177,9 +175,13 @@ function App() {
         mode: cfg.mode,
       };
     }
-    const updated = profiles.map((p) => p.id === id ? { ...p, monitors: monitorsData } : p);
-    setProfiles(updated);
-    await persistProfiles(updated, activeProfileId);
+    setProfiles((prev) => {
+      const prof = prev.find((p) => p.id === id);
+      if (!prof) return prev;
+      const updated = prev.map((p) => p.id === id ? { ...p, monitors: monitorsData } : p);
+      persistProfiles(updated, activeProfileId);
+      return updated;
+    });
     toast(t("profile.saved"), "success");
   };
 
@@ -192,15 +194,19 @@ function App() {
   };
 
   const handleSetProfileThumbnail = async (id: string, path: string) => {
-    const updated = profiles.map((p) => p.id === id ? { ...p, thumbnail: path } : p);
-    setProfiles(updated);
-    await persistProfiles(updated, activeProfileId);
+    setProfiles((prev) => {
+      const updated = prev.map((p) => p.id === id ? { ...p, thumbnail: path } : p);
+      persistProfiles(updated, activeProfileId);
+      return updated;
+    });
   };
 
   const handleRenameProfile = async (id: string, name: string) => {
-    const updated = profiles.map((p) => p.id === id ? { ...p, name } : p);
-    setProfiles(updated);
-    await persistProfiles(updated, activeProfileId);
+    setProfiles((prev) => {
+      const updated = prev.map((p) => p.id === id ? { ...p, name } : p);
+      persistProfiles(updated, activeProfileId);
+      return updated;
+    });
   };
 
   // Load saved layout + window size (single resize on startup)

@@ -83,6 +83,15 @@ body {
   background: var(--ds-text-muted);
 }
 
+/* Time/select input icon visibility in dark mode */
+input[type="time"],
+select {
+  color-scheme: dark;
+}
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
+
 /* Button no-select */
 button, [role="button"] {
   user-select: none;

@@ -110,7 +110,7 @@
     "current": "Actual: {{name}}",
     "max_slots": "Máximo 6 horarios",
     "select_folders": "Seleccionar carpetas para cada monitor",
-    "no_profile": "Asignación directa de carpetas",
+    "no_profile": "Asignar perfil",
     "use_profile": "Usar perfil",
     "no_folders": "Sin carpetas configuradas",
     "change_folders": "Cambiar",

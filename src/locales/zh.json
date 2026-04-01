@@ -110,7 +110,7 @@
     "current": "当前: {{name}}",
     "max_slots": "最多6个时间段",
     "select_folders": "为每个显示器选择文件夹",
-    "no_profile": "直接指定文件夹",
+    "no_profile": "指定配置",
     "use_profile": "使用配置",
     "no_folders": "未配置文件夹",
     "change_folders": "更改",

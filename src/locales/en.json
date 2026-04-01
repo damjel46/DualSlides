@@ -111,7 +111,7 @@
     "current": "Current: {{name}}",
     "max_slots": "Maximum 6 time slots",
     "select_folders": "Select folders for each monitor",
-    "no_profile": "Direct folder mapping",
+    "no_profile": "Assign profile",
     "use_profile": "Use profile",
     "no_folders": "No folders configured",
     "change_folders": "Change",
