@@ -21,7 +21,7 @@ mod win {
     }
 
     /// Enumerate all secondary taskbar windows (Shell_SecondaryTrayWnd).
-    fn find_secondary_taskbars() -> Vec<HWND> {
+    pub fn find_secondary_taskbars() -> Vec<HWND> {
         let mut result = Vec::new();
         unsafe {
             let mut prev = HWND::default();
@@ -112,6 +112,24 @@ pub fn set_taskbar_visible(
         hidden.retain(|&i| i != monitor_index);
     } else if !hidden.contains(&monitor_index) {
         hidden.push(monitor_index);
+    }
+
+    // When toggling the primary taskbar, Windows may re-show secondary taskbars.
+    // Re-hide any secondaries that should still be hidden.
+    if monitor_index == 0 {
+        let has_hidden_secondaries = hidden.iter().any(|&i| i != 0);
+        drop(hidden);
+        if has_hidden_secondaries {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            for sec_hwnd in win::find_secondary_taskbars() {
+                if win::is_visible(sec_hwnd) {
+                    win::set_visible(sec_hwnd, false);
+                    log::info!("Re-hid secondary taskbar after primary toggle");
+                }
+            }
+        }
+    } else {
+        drop(hidden);
     }
 
     log::info!(

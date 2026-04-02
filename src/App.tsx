@@ -14,7 +14,7 @@ import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncSettingsFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
 import { useTheme } from "./hooks/useTheme";
-import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule, setFullscreenPauseEnabled } from "./lib/commands";
+import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule, setFullscreenPauseEnabled, setTaskbarVisible, getTaskbarVisible } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { LAYOUT_SIZES } from "./lib/layout";
@@ -61,6 +61,7 @@ function App() {
   const { theme, toggleTheme, accentId, setAccent, customHex, setCustomAccent } = useTheme();
 
   // ── Profiles ───────────────────────────────────────────────────────
+  const [configReloadKey, setConfigReloadKey] = useState(0);
   interface Profile {
     id: string;
     name: string;
@@ -70,9 +71,11 @@ function App() {
       selectedFiles: string[];
       excluded: string[];
       favorites: string[];
+      filterFavorites?: boolean;
       images: { path: string; filename: string; size_bytes: number }[];
       interval: number;
       mode: "Sequential" | "Shuffle";
+      taskbarHidden?: boolean;
     }>;
   }
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -102,14 +105,25 @@ function App() {
     const monitorsData: Profile["monitors"] = {};
     for (const [mid, cfg] of Object.entries(allConfigs)) {
       const folders = cfg.folders && cfg.folders.length > 0 ? cfg.folders : cfg.folder ? [cfg.folder] : [];
+      const monitorIndex = parseInt(mid.replace("monitor_", ""), 10);
+      const mon = monitors.find((_, i) => i === monitorIndex);
+      let taskbarHidden = false;
+      if (mon) {
+        try {
+          const visible = await getTaskbarVisible(monitorIndex, mon.x, mon.y, mon.width, mon.height);
+          taskbarHidden = !visible;
+        } catch { /* */ }
+      }
       monitorsData[mid] = {
         folders,
         selectedFiles: cfg.selectedFiles || [],
         excluded: cfg.excluded || [],
         favorites: cfg.favorites || [],
+        filterFavorites: cfg.filterFavorites || false,
         images: cfg.images || [],
         interval: cfg.interval,
         mode: cfg.mode,
+        taskbarHidden,
       };
     }
     let thumbnail: string | null = thumbOverride !== undefined ? thumbOverride : null;
@@ -137,11 +151,10 @@ function App() {
     if (!prof) return;
     // Apply each monitor's config to the store
     const store = await load("monitor-configs.json", { autoSave: true, defaults: {} });
+    // Apply slideshow configs to store
+    const taskbarActions: { monitorIndex: number; mon: typeof monitors[0]; hidden: boolean }[] = [];
     for (const [mid, cfg] of Object.entries(prof.monitors)) {
       const existing = await store.get<Record<string, unknown>>(mid) || {};
-      // Profile's images array defines the playback order.
-      // If profile has images, use them (preserves saved order).
-      // If not (old profile), clear images so folder scan rebuilds fresh.
       const profileImages = cfg.images && cfg.images.length > 0 ? cfg.images : [];
       await store.set(mid, {
         ...existing,
@@ -149,12 +162,28 @@ function App() {
         selectedFiles: cfg.selectedFiles,
         excluded: cfg.excluded || [],
         favorites: cfg.favorites || [],
+        filterFavorites: cfg.filterFavorites || false,
         images: profileImages,
         interval: cfg.interval,
         mode: cfg.mode,
       });
+      // Collect taskbar actions for later
+      if (cfg.taskbarHidden !== undefined) {
+        const monitorIndex = parseInt(mid.replace("monitor_", ""), 10);
+        const mon = monitors.find((_, i) => i === monitorIndex);
+        if (mon) taskbarActions.push({ monitorIndex, mon, hidden: cfg.taskbarHidden });
+      }
+    }
+    // Apply taskbar visibility: secondary monitors first, primary (index 0) last
+    // This prevents Windows from re-showing secondaries when primary is toggled
+    taskbarActions.sort((a, b) => (a.monitorIndex === 0 ? 1 : 0) - (b.monitorIndex === 0 ? 1 : 0));
+    for (const { monitorIndex, mon, hidden } of taskbarActions) {
+      try {
+        await setTaskbarVisible(monitorIndex, mon.x, mon.y, mon.width, mon.height, !hidden);
+      } catch { /* */ }
     }
     setActiveProfileId(id);
+    setConfigReloadKey((k) => k + 1);
     await persistProfiles(profiles, id);
     await handleStartAll();
     toast(t("profile.applied", { name: prof.name }), "success");
@@ -165,14 +194,25 @@ function App() {
     const monitorsData: Profile["monitors"] = {};
     for (const [mid, cfg] of Object.entries(allConfigs)) {
       const folders = cfg.folders && cfg.folders.length > 0 ? cfg.folders : cfg.folder ? [cfg.folder] : [];
+      const monitorIndex = parseInt(mid.replace("monitor_", ""), 10);
+      const mon = monitors.find((_, i) => i === monitorIndex);
+      let taskbarHidden = false;
+      if (mon) {
+        try {
+          const visible = await getTaskbarVisible(monitorIndex, mon.x, mon.y, mon.width, mon.height);
+          taskbarHidden = !visible;
+        } catch { /* */ }
+      }
       monitorsData[mid] = {
         folders,
         selectedFiles: cfg.selectedFiles || [],
         excluded: cfg.excluded || [],
         favorites: cfg.favorites || [],
+        filterFavorites: cfg.filterFavorites || false,
         images: cfg.images || [],
         interval: cfg.interval,
         mode: cfg.mode,
+        taskbarHidden,
       };
     }
     setProfiles((prev) => {
@@ -456,10 +496,16 @@ function App() {
           .map((img) => img.path);
       }
 
+      // Filter to favorites-only if enabled
+      if (cfg.filterFavorites && cfg.favorites && cfg.favorites.length > 0) {
+        const favSet = new Set(cfg.favorites);
+        activePaths = activePaths.filter((p) => favSet.has(p));
+      }
+
       if (activePaths.length > 0) {
         // In shuffle mode, duplicate favorite paths 3x for weighted selection
         let finalPaths = activePaths;
-        if (cfg.mode === "Shuffle" && cfg.favorites && cfg.favorites.length > 0) {
+        if (cfg.mode === "Shuffle" && cfg.favorites && cfg.favorites.length > 0 && !cfg.filterFavorites) {
           const favSet = new Set(cfg.favorites);
           const extras: string[] = [];
           for (const p of activePaths) {
@@ -567,9 +613,14 @@ function App() {
         let activePaths = cfg.images
           .filter((img) => !cfg.excluded.includes(img.path))
           .map((img) => img.path);
+        // Filter to favorites-only if enabled for this monitor
+        if (cfg.filterFavorites && cfg.favorites && cfg.favorites.length > 0) {
+          const favSet = new Set(cfg.favorites);
+          activePaths = activePaths.filter((p) => favSet.has(p));
+        }
         if (activePaths.length === 0) continue;
-        // Apply favorite weighting in shuffle mode
-        if (mode === "Shuffle" && cfg.favorites && cfg.favorites.length > 0) {
+        // Apply favorite weighting in shuffle mode (only if not already filtered)
+        if (mode === "Shuffle" && cfg.favorites && cfg.favorites.length > 0 && !cfg.filterFavorites) {
           const favSet = new Set(cfg.favorites);
           const extras: string[] = [];
           for (const p of activePaths) {
@@ -877,6 +928,7 @@ function App() {
                 onSetProfileThumbnail={handleSetProfileThumbnail}
                 onRenameProfile={handleRenameProfile}
                 onUpdateProfile={handleUpdateProfile}
+                configReloadKey={configReloadKey}
               />
             ) : (
               !loading &&

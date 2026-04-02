@@ -302,6 +302,7 @@ interface MonitorCardProps {
   onSetProfileThumbnail: (id: string, path: string) => void;
   onRenameProfile: (id: string, name: string) => void;
   onUpdateProfile: (id: string) => void;
+  configReloadKey?: number;
 }
 
 const PRESETS = [
@@ -333,9 +334,10 @@ export function MonitorCard({
   onSetProfileThumbnail,
   onRenameProfile,
   onUpdateProfile,
+  configReloadKey,
 }: MonitorCardProps) {
   const { t } = useTranslation();
-  const { config, update, loaded } = useMonitorConfig(monitor.id);
+  const { config, update, loaded } = useMonitorConfig(monitor.id, configReloadKey);
   const [taskbarHidden, setTaskbarHidden] = useState(false);
   const [profileMenu, setProfileMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [profileEdit, setProfileEdit] = useState<{ id: string | null; name: string; thumbnail: string | null; isNew?: boolean } | null>(null);
@@ -366,13 +368,12 @@ export function MonitorCard({
     }
   };
 
-  const [filterFavorites, setFilterFavorites] = useState(false);
-
   // Destructure for convenience
   const {
     folder, folders: foldersArr, selectedFiles, images, excluded: excludedArr, favorites: favoritesArr,
-    selectionMode: _selectionMode, interval, useCustom, customInput, mode,
+    filterFavorites, selectionMode: _selectionMode, interval, useCustom, customInput, mode,
   } = config;
+  const setFilterFavorites = (val: boolean) => update({ filterFavorites: val });
   const excluded = new Set(excludedArr || []);
   const favorites = new Set(favoritesArr || []);
 
@@ -399,9 +400,10 @@ export function MonitorCard({
   };
 
   // Detect if running slideshow settings differ from config
+  // Only compare after config is fully loaded to prevent false positives during monitor switch
   const isRunning = status?.is_running ?? false;
   const currentPaths = buildActivePaths();
-  const settingsChanged = isRunning && (
+  const settingsChanged = loaded && isRunning && (
     status!.interval_secs !== effectiveInterval ||
     status!.mode !== mode ||
     status!.total_images !== currentPaths.length
@@ -415,7 +417,7 @@ export function MonitorCard({
   // Auto-apply when image count changes during running slideshow (folder add/remove detected by auto-refresh)
   const prevImageCount = useRef(status?.total_images ?? 0);
   useEffect(() => {
-    if (!isRunning) {
+    if (!loaded || !isRunning) {
       prevImageCount.current = currentPaths.length;
       return;
     }
@@ -424,7 +426,7 @@ export function MonitorCard({
       prevImageCount.current = currentPaths.length;
       onStartFiles(monitor.id, currentPaths, effectiveInterval, mode);
     }
-  }, [currentPaths.length]);
+  }, [currentPaths.length, loaded]);
 
   // Effective folders list: migrate from legacy single `folder` field
   const folders = foldersArr && foldersArr.length > 0 ? foldersArr : folder ? [folder] : [];

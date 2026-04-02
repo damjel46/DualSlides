@@ -9,6 +9,7 @@ export interface MonitorConfig {
   images: ImageInfo[];
   excluded: string[];
   favorites: string[];
+  filterFavorites: boolean;
   selectionMode: "folder" | "files";
   interval: number;
   useCustom: boolean;
@@ -24,6 +25,7 @@ const DEFAULT_CONFIG: MonitorConfig = {
   images: [],
   excluded: [],
   favorites: [],
+  filterFavorites: false,
   selectionMode: "folder",
   interval: 300,
   useCustom: false,
@@ -42,40 +44,44 @@ function getStore() {
   return storePromise;
 }
 
-export function useMonitorConfig(monitorId: string) {
+export function useMonitorConfig(monitorId: string, reloadKey?: number) {
   const [config, setConfig] = useState<MonitorConfig>(DEFAULT_CONFIG);
   const [ready, setReady] = useState(false);
   const saving = useRef(false);
   // Track which monitorId the current config belongs to, to prevent cross-save
   const loadedForId = useRef<string | null>(null);
+  // Monotonic counter to discard stale loads
+  const loadGeneration = useRef(0);
 
-  // Load from store on monitorId change
+  // Load from store on monitorId change or when reloadKey changes (profile load)
   useEffect(() => {
-    let cancelled = false;
+    const gen = ++loadGeneration.current;
     setReady(false);
     loadedForId.current = null;
+    saving.current = true; // block saves while loading
 
     (async () => {
       try {
         const store = await getStore();
         const saved = await store.get<MonitorConfig>(monitorId);
-        if (!cancelled) {
-          setConfig(saved ? { ...DEFAULT_CONFIG, ...saved } : { ...DEFAULT_CONFIG });
-          loadedForId.current = monitorId;
-          setReady(true);
-        }
+        if (gen !== loadGeneration.current) return; // stale
+        setConfig(saved ? { ...DEFAULT_CONFIG, ...saved } : { ...DEFAULT_CONFIG });
+        loadedForId.current = monitorId;
+        setReady(true);
+        // Unblock saves after React has committed the loaded config
+        setTimeout(() => { if (gen === loadGeneration.current) saving.current = false; }, 50);
       } catch {
-        if (!cancelled) {
-          setConfig({ ...DEFAULT_CONFIG });
-          loadedForId.current = monitorId;
-          setReady(true);
-        }
+        if (gen !== loadGeneration.current) return;
+        setConfig({ ...DEFAULT_CONFIG });
+        loadedForId.current = monitorId;
+        setReady(true);
+        setTimeout(() => { if (gen === loadGeneration.current) saving.current = false; }, 50);
       }
     })();
     return () => {
-      cancelled = true;
+      // No cleanup needed — generation check handles staleness
     };
-  }, [monitorId]);
+  }, [monitorId, reloadKey]);
 
   // Save to store — only when ready AND the config is for the current monitorId
   useEffect(() => {
