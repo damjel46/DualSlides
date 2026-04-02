@@ -22,6 +22,9 @@
     "add_folder": "Agregar carpeta",
     "add_images": "Agregar imágenes",
     "hide_taskbar": "Ocultar barra de tareas",
+    "hide_taskbar_tip": "Ocultar la barra de tareas de Windows en este monitor",
+    "select_all_tip": "Incluir todas las imágenes en la presentación",
+    "deselect_all_tip": "Excluir todas las imágenes de la presentación",
     "select_monitor": "Seleccione un monitor arriba para configurar"
   },
   "slideshow": {
@@ -37,11 +40,15 @@
     "resume_all": "Reanudar todo",
     "start_all": "Iniciar todo",
     "sync_settings": "Sincronizar ajustes",
-    "apply": "Aplicar"
+    "sync_settings_tip": "Sincronizar intervalo y modo en todos los monitores",
+    "apply": "Aplicar",
+    "apply_tip": "Aplicar cambios a la presentación en ejecución"
   },
   "settings": {
     "autostart": "Iniciar con el sistema",
     "close_to_tray": "Minimizar a bandeja al cerrar",
+    "pause_on_fullscreen": "Pausar presentación en app de pantalla completa",
+    "pause_on_fullscreen_tip": "Pausar automáticamente al detectar una app en pantalla completa (juego, video, etc.)",
     "language": "Idioma",
     "hotkeys": "Atajos de teclado",
     "general": "General",

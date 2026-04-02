@@ -219,6 +219,20 @@ export async function getActiveScheduleSlot(): Promise<string | null> {
   return invoke("get_active_schedule_slot");
 }
 
+// ── Fullscreen Detection ─────────────────────────────────────────────
+
+export async function setFullscreenPauseEnabled(enabled: boolean): Promise<void> {
+  return invoke("set_fullscreen_pause_enabled", { enabled });
+}
+
+export async function getFullscreenPauseEnabled(): Promise<boolean> {
+  return invoke("get_fullscreen_pause_enabled");
+}
+
+export async function clearFullscreenAutoPause(): Promise<void> {
+  return invoke("clear_fullscreen_auto_pause");
+}
+
 // ── Tray ─────────────────────────────────────────────────────────────
 
 export async function updateTrayLocale(locale: string): Promise<void> {

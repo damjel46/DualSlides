@@ -1,3 +1,4 @@
+use crate::fullscreen_detect::FullscreenDetector;
 use crate::monitor::{self, ImageInfo, MonitorInfo};
 use crate::schedule::{Schedule, ScheduleEngine};
 use crate::slideshow::{SlideshowEngine, SlideshowMode, SlideshowStatus};
@@ -213,6 +214,31 @@ pub fn enable_schedule(
 #[tauri::command]
 pub fn get_active_schedule_slot(engine: State<'_, ScheduleEngine>) -> Option<String> {
     engine.get_active_slot()
+}
+
+// ── Fullscreen Detection ─────────────────────────────────────────────
+
+#[tauri::command]
+pub fn set_fullscreen_pause_enabled(
+    app: tauri::AppHandle,
+    detector: State<'_, FullscreenDetector>,
+    enabled: bool,
+) {
+    detector.set_enabled(enabled, app);
+}
+
+#[tauri::command]
+pub fn get_fullscreen_pause_enabled(
+    detector: State<'_, FullscreenDetector>,
+) -> bool {
+    detector.is_enabled()
+}
+
+#[tauri::command]
+pub fn clear_fullscreen_auto_pause(
+    detector: State<'_, FullscreenDetector>,
+) {
+    detector.clear_auto_pause();
 }
 
 // ── Tray ─────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { updateTrayLocale } from "../lib/commands";
+import { updateTrayLocale, setFullscreenPauseEnabled } from "../lib/commands";
 // HotkeyInput removed — hotkeys are now fixed with toggle on/off
 import type { HotkeyBinding } from "../hooks/useHotkeys";
 
@@ -168,7 +168,7 @@ function CustomColorPicker({
   );
 }
 
-function Toggle({
+export function Toggle({
   checked,
   onChange,
 }: {
@@ -209,13 +209,16 @@ export function Settings({
   const { t, i18n } = useTranslation();
   const [autostart, setAutostart] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
+  const [pauseOnFullscreen, setPauseOnFullscreen] = useState(false);
   const [langPref, setLangPref] = useState<string>(i18n.language);
 
-  // Load saved language preference
+  // Load saved language preference + fullscreen pause setting
   useEffect(() => {
     import("@tauri-apps/plugin-store").then(m => m.load("settings.json", { autoSave: true, defaults: {} })).then(async (store) => {
       const saved = await store.get<string>("language");
       if (saved) setLangPref(saved);
+      const fsPause = await store.get<boolean>("pause_on_fullscreen");
+      if (fsPause) setPauseOnFullscreen(true);
     }).catch(() => {});
   }, []);
 
@@ -234,6 +237,17 @@ export function Settings({
     } catch (e) {
       console.error("Autostart toggle failed:", e);
     }
+  };
+
+  const handleFullscreenPauseToggle = async () => {
+    const newVal = !pauseOnFullscreen;
+    setPauseOnFullscreen(newVal);
+    await setFullscreenPauseEnabled(newVal);
+    try {
+      const { load } = await import("@tauri-apps/plugin-store");
+      const store = await load("settings.json", { autoSave: true, defaults: {} });
+      await store.set("pause_on_fullscreen", newVal);
+    } catch { /* */ }
   };
 
   const handleLanguageChange = async (lng: string) => {
@@ -354,6 +368,10 @@ export function Settings({
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-ds-text">{t("settings.close_to_tray")}</span>
                     <Toggle checked={closeToTray} onChange={() => setCloseToTray(!closeToTray)} />
+                  </div>
+                  <div className="flex items-center justify-between" title={t("settings.pause_on_fullscreen_tip")}>
+                    <span className="text-sm text-ds-text">{t("settings.pause_on_fullscreen")}</span>
+                    <Toggle checked={pauseOnFullscreen} onChange={handleFullscreenPauseToggle} />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-ds-text">{t("settings.language")}</span>

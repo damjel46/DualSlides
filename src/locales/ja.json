@@ -22,6 +22,9 @@
     "add_folder": "フォルダ追加",
     "add_images": "画像追加",
     "hide_taskbar": "タスクバーを隠す",
+    "hide_taskbar_tip": "このモニターのWindowsタスクバーを隠します",
+    "select_all_tip": "すべての画像をスライドショーに含める",
+    "deselect_all_tip": "すべての画像をスライドショーから除外",
     "select_monitor": "上のモニターを選択して設定"
   },
   "slideshow": {
@@ -37,11 +40,15 @@
     "resume_all": "全て再開",
     "start_all": "全て開始",
     "sync_settings": "設定同期",
-    "apply": "適用"
+    "sync_settings_tip": "すべてのモニターの間隔とモードを同期します",
+    "apply": "適用",
+    "apply_tip": "変更した設定を実行中のスライドショーに適用"
   },
   "settings": {
     "autostart": "起動時に自動実行",
     "close_to_tray": "閉じる時にトレイに最小化",
+    "pause_on_fullscreen": "フルスクリーンアプリ実行時にスライドショーを一時停止",
+    "pause_on_fullscreen_tip": "フルスクリーンアプリ（ゲーム、動画など）検出時に自動一時停止",
     "language": "言語",
     "hotkeys": "ショートカット",
     "general": "一般",

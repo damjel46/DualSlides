@@ -14,7 +14,7 @@ import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAppConfig, syncSettingsFromMonitor, getAllMonitorConfigs } from "./hooks/useMonitorConfig";
 import { useTheme } from "./hooks/useTheme";
-import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule } from "./lib/commands";
+import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule, setFullscreenPauseEnabled } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { LAYOUT_SIZES } from "./lib/layout";
@@ -233,6 +233,13 @@ function App() {
       } catch {
         setLayout("horizontal");
       }
+
+      // Restore fullscreen pause setting
+      try {
+        const settingsStore = await load("settings.json", { autoSave: true, defaults: {} });
+        const fsPause = await settingsStore.get<boolean>("pause_on_fullscreen");
+        if (fsPause) await setFullscreenPauseEnabled(true);
+      } catch { /* */ }
     })();
   }, []);
 

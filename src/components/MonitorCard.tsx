@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
+import { Toggle } from "./Settings";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible } from "../lib/commands";
@@ -165,7 +166,7 @@ function ImageGrid({
 
   return (
     <>
-      <div className="flex max-h-96 flex-wrap content-start gap-1.5 overflow-x-hidden overflow-y-auto rounded-xl border border-ds-border bg-ds-bg/30 p-2">
+      <div className="flex max-h-96 flex-wrap content-start gap-3 overflow-x-hidden overflow-y-auto rounded-xl border border-ds-border bg-ds-bg/30 p-3">
         {displayImages.map((img) => {
           const isChecked = !excluded.has(img.path);
           const isCurrent = currentImage === img.path;
@@ -178,7 +179,9 @@ function ImageGrid({
                 if (el) itemRefs.current.set(img.path, el);
                 else itemRefs.current.delete(img.path);
               }}
-              className="group relative h-24 shrink-0"
+              className={`group relative h-24 shrink-0 transition-transform duration-200 ${
+                !isBeingDragged && isChecked && !isCurrent ? "group-hover:scale-110" : ""
+              } ${isCurrent ? "scale-110" : ""}`}
               style={{ opacity: isBeingDragged ? 0.3 : 1 }}
             >
               {/* Drag handle */}
@@ -206,15 +209,15 @@ function ImageGrid({
                     !isChecked
                       ? "opacity-30 grayscale ring-1 ring-ds-border"
                       : isCurrent
-                        ? "ring-2 ring-ds-accent hover:scale-110"
-                        : "opacity-80 ring-1 ring-ds-border group-hover:opacity-100 group-hover:scale-110"
+                        ? "ring-2 ring-ds-accent"
+                        : "opacity-80 ring-1 ring-ds-border group-hover:opacity-100"
                   }`}
                 />
               </button>
 
               {/* Check indicator */}
               {isChecked && (
-                <div className="pointer-events-none absolute top-1 right-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-ds-accent text-white">
+                <div className="pointer-events-none absolute top-3.5 right-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-ds-accent text-white">
                   <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
                     <path
                       fillRule="evenodd"
@@ -228,7 +231,7 @@ function ImageGrid({
               {/* Favorite heart */}
               <button
                 onClick={(e) => { e.stopPropagation(); onToggleFavorite(img.path); }}
-                className={`absolute top-1 left-1 z-20 flex h-5 w-5 items-center justify-center rounded-full transition ${
+                className={`absolute top-3.5 left-1 z-20 flex h-5 w-5 items-center justify-center rounded-full transition ${
                   isFav
                     ? "bg-red-500/80 text-white opacity-100"
                     : "bg-black/40 text-white/60 opacity-0 group-hover:opacity-100 hover:text-red-400"
@@ -694,7 +697,8 @@ export function MonitorCard({
           <div className="mb-1.5 flex gap-2 text-[10px]">
             <button
               onClick={() => update({ excluded: [] })}
-              className="text-ds-accent-light hover:underline"
+              title={t("monitor.select_all_tip")}
+              className="rounded-md border border-ds-accent/30 bg-ds-accent/10 px-2 py-0.5 font-medium text-ds-accent-light transition hover:bg-ds-accent/25 active:scale-95"
             >
               {t("monitor.select_all")}
             </button>
@@ -702,21 +706,24 @@ export function MonitorCard({
               onClick={() =>
                 update({ excluded: images.map((img) => img.path) })
               }
-              className="text-ds-text-muted hover:underline"
+              title={t("monitor.deselect_all_tip")}
+              className="rounded-md border border-ds-border px-2 py-0.5 font-medium text-ds-text-muted transition hover:bg-ds-card-hover hover:text-ds-text active:scale-95"
             >
               {t("monitor.deselect_all")}
             </button>
-            {favorites.size > 0 && (
-              <button
-                onClick={() => setFilterFavorites(!filterFavorites)}
-                className={`flex items-center gap-0.5 ${filterFavorites ? "text-red-400" : "text-ds-text-muted hover:text-red-400"}`}
-              >
-                <svg className="h-3 w-3" fill={filterFavorites ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-                {t("favorite.filter")}
-              </button>
-            )}
+            <button
+              onClick={() => setFilterFavorites(!filterFavorites)}
+              className={`flex items-center gap-1 rounded-md border px-2 py-0.5 font-medium transition active:scale-95 ${
+                filterFavorites
+                  ? "border-red-400/40 bg-red-500/15 text-red-400"
+                  : "border-ds-border text-ds-text-muted hover:border-red-400/40 hover:bg-red-500/5 hover:text-red-400"
+              }`}
+            >
+              <svg className="h-3 w-3" fill={filterFavorites ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              {t("favorite.filter")}
+            </button>
           </div>
 
           <div className="max-h-[270px] overflow-y-auto rounded-lg">
@@ -792,25 +799,15 @@ export function MonitorCard({
 
         <div className="flex flex-wrap items-center gap-3">
 
-        <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-ds-accent/50">
-          <input
-            type="checkbox"
-            checked={syncEnabled}
-            onChange={() => onSyncToggle(monitor.id)}
-            className="h-3.5 w-3.5 accent-ds-accent"
-          />
-          {t("slideshow.sync_settings")}
-        </label>
+        <div className="flex items-center gap-1.5 rounded-lg border border-ds-border bg-ds-bg/30 px-2.5 py-1.5" title={t("slideshow.sync_settings_tip")}>
+          <Toggle checked={syncEnabled} onChange={() => onSyncToggle(monitor.id)} />
+          <span className="text-xs font-medium text-ds-text">{t("slideshow.sync_settings")}</span>
+        </div>
 
-        <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-ds-accent/50">
-          <input
-            type="checkbox"
-            checked={taskbarHidden}
-            onChange={handleTaskbarToggle}
-            className="h-3.5 w-3.5 accent-ds-accent"
-          />
-          {t("monitor.hide_taskbar")}
-        </label>
+        <div className="flex items-center gap-1.5 rounded-lg border border-ds-border bg-ds-bg/30 px-2.5 py-1.5" title={t("monitor.hide_taskbar_tip")}>
+          <Toggle checked={taskbarHidden} onChange={handleTaskbarToggle} />
+          <span className="text-xs font-medium text-ds-text">{t("monitor.hide_taskbar")}</span>
+        </div>
 
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-ds-text-muted">{t("monitor.mode")}</span>
@@ -837,17 +834,6 @@ export function MonitorCard({
             </button>
           </div>
 
-          {favorites.size > 0 && (
-            <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-ds-border px-2.5 py-1.5 text-xs text-ds-text-dim transition hover:border-red-400/30">
-              <input
-                type="checkbox"
-                checked={filterFavorites}
-                onChange={() => setFilterFavorites(!filterFavorites)}
-                className="h-3.5 w-3.5 accent-red-500"
-              />
-              {t("favorite.filter")}
-            </label>
-          )}
 
         </div>
         </div>

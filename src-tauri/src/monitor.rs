@@ -242,17 +242,20 @@ mod win {
     ) -> Result<(), String> {
         ensure_mapping(tauri_monitors)?;
 
-        // Skip if same wallpaper is already set (global tracker, not thread-local)
+        // Atomic check-and-update: single lock scope to prevent TOCTOU race
         {
-            let guard = CURRENT_WP.lock().unwrap();
+            let mut guard = CURRENT_WP.lock().unwrap();
             if let Some(ref map) = *guard {
                 if map.get(&monitor_index).map(|s| s == bmp_path).unwrap_or(false) {
                     return Ok(());
                 }
             }
+            // Pre-mark to prevent concurrent duplicate calls
+            let map = guard.get_or_insert_with(HashMap::new);
+            map.insert(monitor_index, bmp_path.to_string());
         }
 
-        INDEX_TO_PATH.with(|cell| {
+        let result = INDEX_TO_PATH.with(|cell| {
             let opt = cell.borrow();
             let map = opt.as_ref().ok_or_else(|| "Monitor mapping not initialized".to_string())?;
             let device_path = map.get(&monitor_index).ok_or_else(|| {
@@ -271,15 +274,18 @@ mod win {
                     .map_err(|e| format!("SetWallpaper failed: {}", e))?;
             }
 
-            // Update global tracker
-            {
-                let mut guard = CURRENT_WP.lock().unwrap();
-                let map = guard.get_or_insert_with(HashMap::new);
-                map.insert(monitor_index, bmp_path.to_string());
-            }
-
             Ok(())
-        })
+        });
+
+        // Rollback tracker on failure so retry is possible
+        if result.is_err() {
+            let mut guard = CURRENT_WP.lock().unwrap();
+            if let Some(ref mut map) = *guard {
+                map.remove(&monitor_index);
+            }
+        }
+
+        result
     }
 }
 

@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use tokio::time::{self, Duration};
 use tokio_util::sync::CancellationToken;
 
+use tauri::Emitter;
+
 use crate::monitor;
 
 // ── Public types ─────────────────────────────────────────────────────
@@ -60,13 +62,25 @@ impl MonitorSlideshow {
 
 pub struct SlideshowEngine {
     monitors: Arc<Mutex<HashMap<String, MonitorSlideshow>>>,
+    app_handle: Mutex<Option<tauri::AppHandle>>,
+}
+
+fn emit_wallpaper_changed(handle: &Option<tauri::AppHandle>) {
+    if let Some(ref app) = handle {
+        let _ = app.emit("wallpaper-changed", ());
+    }
 }
 
 impl SlideshowEngine {
     pub fn new() -> Self {
         Self {
             monitors: Arc::new(Mutex::new(HashMap::new())),
+            app_handle: Mutex::new(None),
         }
+    }
+
+    pub fn set_app_handle(&self, handle: tauri::AppHandle) {
+        *self.app_handle.lock().unwrap() = Some(handle);
     }
 
     // ── 1. start ─────────────────────────────────────────────────────
@@ -235,6 +249,7 @@ impl SlideshowEngine {
         token: CancellationToken,
     ) {
         let monitors = self.monitors.clone();
+        let app_handle = self.app_handle.lock().unwrap().clone();
         let mid = monitor_id;
         let total = images.len();
 
@@ -272,6 +287,7 @@ impl SlideshowEngine {
                             ms.current_index = index % total;
                         }
                     }
+                    emit_wallpaper_changed(&app_handle);
 
                     index += 1;
                 }
@@ -305,14 +321,15 @@ impl SlideshowEngine {
                 if token.is_cancelled() { break; }
             }
 
-            // Mark stopped — only if our token is still the active one
-            // (a new timer may have already replaced us via update_settings)
+            // Mark stopped — only if no new timer has replaced us.
+            // If update_settings() spawned a new timer, ms.cancel_token holds the NEW (uncancelled) token.
+            // If stop_slideshow() was called, ms.cancel_token is None and is_running is already false.
             let mut map = monitors.lock().unwrap();
             if let Some(ms) = map.get_mut(&mid) {
-                let is_our_token = ms.cancel_token.as_ref()
-                    .map(|t| t.is_cancelled())
-                    .unwrap_or(true);
-                if is_our_token {
+                let replaced_by_new_timer = ms.cancel_token.as_ref()
+                    .map(|t| !t.is_cancelled())
+                    .unwrap_or(false);
+                if !replaced_by_new_timer {
                     ms.is_running = false;
                     ms.cancel_token = None;
                     log::info!("Slideshow stopped: {}", mid);
@@ -444,6 +461,7 @@ impl SlideshowEngine {
         drop(map); // release lock before I/O
 
         monitor::set_wallpaper(monitor_id, &path)?;
+        emit_wallpaper_changed(&*self.app_handle.lock().unwrap());
         log::info!("[{}] next → index {}", monitor_id, idx);
         Ok(())
     }
@@ -477,6 +495,7 @@ impl SlideshowEngine {
         drop(map);
 
         monitor::set_wallpaper(monitor_id, &path)?;
+        emit_wallpaper_changed(&*self.app_handle.lock().unwrap());
         log::info!("[{}] prev (shuffle random)", monitor_id);
         Ok(())
     }
@@ -593,16 +612,17 @@ impl SlideshowEngine {
             }).collect()
         };
 
-        // Register state
+        // Register state (clamp index per monitor to avoid out-of-bounds)
         {
             let mut map = self.monitors.lock().unwrap();
             for (mid, images) in &entries {
+                let clamped_index = if images.is_empty() { 0 } else { global_index % images.len() };
                 map.insert(
                     mid.clone(),
                     MonitorSlideshow {
                         folder_path: String::new(),
                         images: images.clone(),
-                        current_index: global_index,
+                        current_index: clamped_index,
                         interval_secs,
                         mode: mode.clone(),
                         is_running: true,
@@ -620,6 +640,7 @@ impl SlideshowEngine {
 
         // Single shared timer task
         let monitors_state = self.monitors.clone();
+        let app_handle = self.app_handle.lock().unwrap().clone();
 
         tauri::async_runtime::spawn(async move {
             let mut index = global_index;
@@ -653,6 +674,7 @@ impl SlideshowEngine {
                         }
                     }
                 }
+                emit_wallpaper_changed(&app_handle);
                 index += 1;
             }
 
@@ -709,6 +731,7 @@ impl SlideshowEngine {
                         }
                     }
                 }
+                emit_wallpaper_changed(&app_handle);
 
                 index += 1;
                 last_compose_duration = tick_start.elapsed();
@@ -735,11 +758,10 @@ impl SlideshowEngine {
             let mut map = monitors_state.lock().unwrap();
             for (mid, _) in &entries {
                 if let Some(ms) = map.get_mut(mid.as_str()) {
-                    // Only mark stopped if our token is still the active one
-                    let is_our_token = ms.cancel_token.as_ref()
-                        .map(|t| t.is_cancelled())
-                        .unwrap_or(true);
-                    if is_our_token {
+                    let replaced_by_new_timer = ms.cancel_token.as_ref()
+                        .map(|t| !t.is_cancelled())
+                        .unwrap_or(false);
+                    if !replaced_by_new_timer {
                         ms.is_running = false;
                         ms.cancel_token = None;
                     }
@@ -784,12 +806,13 @@ impl SlideshowEngine {
         {
             let mut map = self.monitors.lock().unwrap();
             for (mid, images, _, _, _) in &entries {
+                let clamped_index = if images.is_empty() { 0 } else { global_index % images.len() };
                 map.insert(
                     mid.clone(),
                     MonitorSlideshow {
                         folder_path: String::new(),
                         images: images.clone(),
-                        current_index: global_index,
+                        current_index: clamped_index,
                         interval_secs,
                         mode: mode.clone(),
                         is_running: true,
@@ -924,14 +947,14 @@ impl SlideshowEngine {
                 }
             }
 
-            // Mark all stopped — only if our token is still active
+            // Mark all stopped — only if no new timer has replaced us
             let mut map = monitors.lock().unwrap();
             for (mid, _) in &monitor_data {
                 if let Some(ms) = map.get_mut(mid.as_str()) {
-                    let is_our_token = ms.cancel_token.as_ref()
-                        .map(|t| t.is_cancelled())
-                        .unwrap_or(true);
-                    if is_our_token {
+                    let replaced_by_new_timer = ms.cancel_token.as_ref()
+                        .map(|t| !t.is_cancelled())
+                        .unwrap_or(false);
+                    if !replaced_by_new_timer {
                         ms.is_running = false;
                         ms.cancel_token = None;
                     }

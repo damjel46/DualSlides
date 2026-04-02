@@ -22,6 +22,9 @@
     "add_folder": "폴더 추가",
     "add_images": "이미지 추가",
     "hide_taskbar": "작업표시줄 숨기기",
+    "hide_taskbar_tip": "이 모니터의 Windows 작업표시줄을 숨깁니다",
+    "select_all_tip": "모든 이미지를 슬라이드쇼에 포함",
+    "deselect_all_tip": "모든 이미지를 슬라이드쇼에서 제외",
     "select_monitor": "위에서 모니터를 선택하세요"
   },
   "slideshow": {
@@ -37,11 +40,14 @@
     "resume_all": "전체 재개",
     "start_all": "전체 시작",
     "sync_settings": "설정 동기화",
+    "sync_settings_tip": "모든 모니터의 간격과 모드를 동기화합니다",
     "apply": "적용"
   },
   "settings": {
     "autostart": "부팅 시 자동 실행",
     "close_to_tray": "닫을 때 트레이로 최소화",
+    "pause_on_fullscreen": "전체화면 앱 실행 시 슬라이드쇼 일시정지",
+    "pause_on_fullscreen_tip": "전체화면 앱(게임, 영상 등) 감지 시 자동으로 일시정지",
     "language": "언어",
     "hotkeys": "단축키",
     "general": "일반",

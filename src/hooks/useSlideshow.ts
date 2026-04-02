@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import {
   startSlideshow,
   startSlideshowFiles,
@@ -9,6 +10,7 @@ import {
   resumeAll,
   syncRestartAll,
   getSlideshowStatus,
+  clearFullscreenAutoPause,
 } from "../lib/commands";
 import type { SlideshowMode, SlideshowStatus } from "../lib/commands";
 
@@ -25,8 +27,14 @@ export function useSlideshow() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 2000);
-    return () => clearInterval(id);
+    // Fallback polling every 5s (in case event is missed)
+    const id = setInterval(refresh, 5000);
+    // Instant refresh on wallpaper change event from Rust
+    const unlisten = listen("wallpaper-changed", () => { refresh(); });
+    return () => {
+      clearInterval(id);
+      unlisten.then((fn) => fn());
+    };
   }, [refresh]);
 
   const start = async (
@@ -65,11 +73,13 @@ export function useSlideshow() {
   };
 
   const pause = async () => {
+    await clearFullscreenAutoPause();
     await pauseAll();
     await refresh();
   };
 
   const resume = async () => {
+    await clearFullscreenAutoPause();
     await resumeAll();
     await refresh();
   };

@@ -22,6 +22,9 @@
     "add_folder": "Add folder",
     "add_images": "Add images",
     "hide_taskbar": "Hide taskbar",
+    "hide_taskbar_tip": "Hide the Windows taskbar on this monitor",
+    "select_all_tip": "Include all images in slideshow",
+    "deselect_all_tip": "Exclude all images from slideshow",
     "select_monitor": "Select a monitor above to configure"
   },
   "slideshow": {
@@ -37,11 +40,15 @@
     "resume_all": "Resume All",
     "start_all": "Start All",
     "sync_settings": "Sync settings",
-    "apply": "Apply"
+    "sync_settings_tip": "Synchronize interval and mode across all monitors",
+    "apply": "Apply",
+    "apply_tip": "Apply changed settings to running slideshow"
   },
   "settings": {
     "autostart": "Start on boot",
     "close_to_tray": "Minimize to tray on close",
+    "pause_on_fullscreen": "Pause slideshow on fullscreen app",
+    "pause_on_fullscreen_tip": "Auto-pause when a fullscreen app (game, video, etc.) is detected",
     "language": "Language",
     "hotkeys": "Hotkeys",
     "general": "General",

@@ -60,18 +60,23 @@ export function useHotkeys(
   // Register global shortcuts
   useEffect(() => {
     if (!loaded) return;
-    const registered: string[] = [];
+    let cancelled = false;
 
     const registerAll = async () => {
+      // Unregister all first to handle HMR / re-renders cleanly
       for (const binding of hotkeys) {
-        if (binding.enabled === false) continue; // Skip disabled hotkeys
+        try { await unregister(binding.shortcut); } catch { /* not registered */ }
+      }
+      if (cancelled) return;
+
+      for (const binding of hotkeys) {
+        if (binding.enabled === false) continue;
         try {
           await register(binding.shortcut, (event) => {
             if (event.state === "Pressed") {
               onActionRef.current(binding.action);
             }
           });
-          registered.push(binding.shortcut);
         } catch (e) {
           console.error(`Failed to register hotkey ${binding.shortcut}:`, e);
         }
@@ -81,8 +86,9 @@ export function useHotkeys(
     registerAll();
 
     return () => {
-      for (const shortcut of registered) {
-        unregister(shortcut).catch(() => {});
+      cancelled = true;
+      for (const binding of hotkeys) {
+        unregister(binding.shortcut).catch(() => {});
       }
     };
   }, [hotkeys, loaded]);

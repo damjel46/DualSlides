@@ -22,6 +22,9 @@
     "add_folder": "添加文件夹",
     "add_images": "添加图片",
     "hide_taskbar": "隐藏任务栏",
+    "hide_taskbar_tip": "隐藏此显示器的Windows任务栏",
+    "select_all_tip": "将所有图片加入幻灯片",
+    "deselect_all_tip": "将所有图片从幻灯片中移除",
     "select_monitor": "选择上方的显示器进行配置"
   },
   "slideshow": {
@@ -37,11 +40,15 @@
     "resume_all": "全部恢复",
     "start_all": "全部开始",
     "sync_settings": "同步设置",
-    "apply": "应用"
+    "sync_settings_tip": "同步所有显示器的间隔和模式",
+    "apply": "应用",
+    "apply_tip": "将更改的设置应用到正在运行的幻灯片"
   },
   "settings": {
     "autostart": "开机自启",
     "close_to_tray": "关闭时最小化到托盘",
+    "pause_on_fullscreen": "全屏应用运行时暂停幻灯片",
+    "pause_on_fullscreen_tip": "检测到全屏应用（游戏、视频等）时自动暂停",
     "language": "语言",
     "hotkeys": "快捷键",
     "general": "常规",

@@ -1,5 +1,6 @@
 mod commands;
 mod fade;
+mod fullscreen_detect;
 mod hotkey;
 mod monitor;
 mod profiles;
@@ -9,6 +10,7 @@ mod taskbar;
 mod tray;
 mod zen_mode;
 
+use fullscreen_detect::FullscreenDetector;
 use schedule::ScheduleEngine;
 use slideshow::SlideshowEngine;
 use tauri::Manager;
@@ -44,8 +46,11 @@ pub fn run() {
             }
 
             // Managed state
-            app.manage(SlideshowEngine::new());
+            let engine = SlideshowEngine::new();
+            engine.set_app_handle(app.handle().clone());
+            app.manage(engine);
             app.manage(ScheduleEngine::new());
+            app.manage(FullscreenDetector::new());
             app.manage(tray::default_locale_state());
 
             // Build system tray (default locale = en)
@@ -120,6 +125,9 @@ pub fn run() {
             commands::get_schedule,
             commands::enable_schedule,
             commands::get_active_schedule_slot,
+            commands::set_fullscreen_pause_enabled,
+            commands::get_fullscreen_pause_enabled,
+            commands::clear_fullscreen_auto_pause,
         ])
         // ── Window close → hide to tray ──────────────────────────
         .on_window_event(|window, event| {

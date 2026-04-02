@@ -176,7 +176,7 @@ fn update_canvas(pairs: &[(String, String)]) -> Result<String, String> {
 
     let monitors = monitor::get_cached_monitors();
     let mut guard = CANVAS.lock().unwrap();
-    let cached = guard.as_mut().unwrap();
+    let cached = guard.as_mut().ok_or("Canvas was invalidated after creation")?;
 
     let start = std::time::Instant::now();
 
@@ -381,22 +381,41 @@ mod win {
                 return Err(format!("CoCreateInstance(ActiveDesktop) failed: {:?}", hr));
             }
 
+            // IActiveDesktop vtable layout (COM IUnknown base + interface methods):
+            //   [0] QueryInterface  [1] AddRef  [2] Release
+            //   [3] ApplyChanges    [4] GetWallpaper  [5] SetWallpaper  ...
             let vtbl = *(ppv as *const *const usize);
+            if vtbl.is_null() {
+                return Err("IActiveDesktop vtable pointer is null".into());
+            }
 
-            let set_wallpaper: FnSetWallpaper = std::mem::transmute(*vtbl.add(5));
+            // Helper: read vtable entry with null guard
+            macro_rules! vtbl_fn {
+                ($offset:expr, $ty:ty) => {{
+                    let raw = *vtbl.add($offset);
+                    if raw == 0 {
+                        let release: FnRelease = std::mem::transmute(*vtbl.add(2));
+                        release(ppv);
+                        return Err(format!("IActiveDesktop vtable entry {} is null", $offset));
+                    }
+                    std::mem::transmute::<usize, $ty>(raw)
+                }};
+            }
+
+            let set_wallpaper: FnSetWallpaper = vtbl_fn!(5, FnSetWallpaper);
             let wide_path: Vec<u16> = bmp_path.encode_utf16().chain(std::iter::once(0)).collect();
             let hr = set_wallpaper(ppv, wide_path.as_ptr(), 0);
 
             if hr.is_err() {
-                let release: FnRelease = std::mem::transmute(*vtbl.add(2));
+                let release: FnRelease = vtbl_fn!(2, FnRelease);
                 release(ppv);
                 return Err(format!("IActiveDesktop::SetWallpaper failed: {:?}", hr));
             }
 
-            let apply_changes: FnApplyChanges = std::mem::transmute(*vtbl.add(3));
+            let apply_changes: FnApplyChanges = vtbl_fn!(3, FnApplyChanges);
             let hr = apply_changes(ppv, AD_APPLY_ALL);
 
-            let release: FnRelease = std::mem::transmute(*vtbl.add(2));
+            let release: FnRelease = vtbl_fn!(2, FnRelease);
             release(ppv);
 
             if hr.is_err() {
