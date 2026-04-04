@@ -125,7 +125,7 @@ impl ScheduleEngine {
         None
     }
 
-    /// Start the schedule check timer. Checks every 30 seconds.
+    /// Start the schedule check timer. Checks every 5 seconds.
     /// When a slot transition is detected, emits "schedule-slot-changed"
     /// event via the AppHandle.
     pub fn start_timer(&self, app: tauri::AppHandle) {
@@ -160,7 +160,7 @@ impl ScheduleEngine {
         }
 
         tauri::async_runtime::spawn(async move {
-            let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(30));
+            let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(5));
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useMonitorConfig } from "../hooks/useMonitorConfig";
+import { openFolder } from "../lib/commands";
 import type { MonitorInfo } from "../lib/commands";
 
 interface MonitorSourceProps {
@@ -91,9 +92,13 @@ export function MonitorSource({ monitor }: MonitorSourceProps) {
                 <svg className="h-4 w-4 shrink-0 text-ds-accent-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
-                <span className="flex-1 truncate text-sm text-ds-text" title={f}>
+                <button
+                  className="flex-1 truncate text-left text-sm text-ds-text hover:text-ds-accent-light transition cursor-pointer"
+                  title={f}
+                  onClick={() => openFolder(f)}
+                >
                   {f.split(/[/\\]/).pop()}
-                </span>
+                </button>
                 <button
                   onClick={() => handleRemoveFolder(f)}
                   className="shrink-0 rounded-lg p-1 text-ds-text-muted transition hover:bg-red-500/20 hover:text-red-400"

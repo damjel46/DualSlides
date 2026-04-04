@@ -128,6 +128,7 @@ pub fn run() {
             commands::set_fullscreen_pause_enabled,
             commands::get_fullscreen_pause_enabled,
             commands::clear_fullscreen_auto_pause,
+            commands::open_folder,
         ])
         // ── Window close → hide to tray ──────────────────────────
         .on_window_event(|window, event| {

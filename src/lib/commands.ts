@@ -233,6 +233,12 @@ export async function clearFullscreenAutoPause(): Promise<void> {
   return invoke("clear_fullscreen_auto_pause");
 }
 
+// ── Folder ──────────────────────────────────────────────────────────
+
+export async function openFolder(path: string): Promise<void> {
+  return invoke("open_folder", { path });
+}
+
 // ── Tray ─────────────────────────────────────────────────────────────
 
 export async function updateTrayLocale(locale: string): Promise<void> {

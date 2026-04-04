@@ -9,6 +9,7 @@ import { MonitorSource } from "./components/MonitorSource";
 import { Settings } from "./components/Settings";
 import type { SettingsTab } from "./components/Settings";
 import { ScheduleModal } from "./components/ScheduleModal";
+import { FaqModal } from "./components/FaqModal";
 import { useMonitors } from "./hooks/useMonitors";
 import { useSlideshow } from "./hooks/useSlideshow";
 import { useHotkeys } from "./hooks/useHotkeys";
@@ -44,6 +45,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(false);
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
 
   // Auto-select primary monitor on first load
@@ -55,6 +57,7 @@ function App() {
   }, [monitors]);
   const { syncEnabled, setSync } = useAppConfig();
   const [hasStoredConfigs, setHasStoredConfigs] = useState(false);
+  const [autoResumed, setAutoResumed] = useState(false);
   const [zenActive, setZenActive] = useState(false);
   const [allPinned, setAllPinned] = useState(false);
   const [layout, setLayout] = useState<"vertical" | "horizontal" | null>(null);
@@ -74,6 +77,8 @@ function App() {
       filterFavorites?: boolean;
       images: { path: string; filename: string; size_bytes: number }[];
       interval: number;
+      useCustom?: boolean;
+      customInput?: string;
       mode: "Sequential" | "Shuffle";
       taskbarHidden?: boolean;
     }>;
@@ -122,6 +127,8 @@ function App() {
         filterFavorites: cfg.filterFavorites || false,
         images: cfg.images || [],
         interval: cfg.interval,
+        useCustom: cfg.useCustom || false,
+        customInput: cfg.customInput || "",
         mode: cfg.mode,
         taskbarHidden,
       };
@@ -149,6 +156,8 @@ function App() {
   const handleLoadProfile = async (id: string, _skipConfirm = false) => {
     const prof = profiles.find((p) => p.id === id);
     if (!prof) return;
+    // Stop current slideshow immediately to prevent stale images during config swap
+    await pause();
     // Apply each monitor's config to the store
     const store = await load("monitor-configs.json", { autoSave: true, defaults: {} });
     // Apply slideshow configs to store
@@ -165,6 +174,8 @@ function App() {
         filterFavorites: cfg.filterFavorites || false,
         images: profileImages,
         interval: cfg.interval,
+        useCustom: cfg.useCustom ?? ![10,30,60,300,600,1800,3600].includes(cfg.interval),
+        customInput: cfg.customInput ?? (![10,30,60,300,600,1800,3600].includes(cfg.interval) ? String(cfg.interval) : ""),
         mode: cfg.mode,
       });
       // Collect taskbar actions for later
@@ -211,6 +222,8 @@ function App() {
         filterFavorites: cfg.filterFavorites || false,
         images: cfg.images || [],
         interval: cfg.interval,
+        useCustom: cfg.useCustom || false,
+        customInput: cfg.customInput || "",
         mode: cfg.mode,
         taskbarHidden,
       };
@@ -365,6 +378,9 @@ function App() {
       async (event) => {
         const { slot_name, profile_id, folders } = event.payload;
 
+        // Immediately pause current slideshow to prevent stale images during transition
+        await pause();
+
         // If slot has a profile, load it
         if (profile_id) {
           const prof = profiles.find((p) => p.id === profile_id);
@@ -454,7 +470,9 @@ function App() {
     });
   }, [statuses]);
 
-  const handleStartAll = useCallback(async (forceSynced?: boolean) => {
+  // (running state saved implicitly — always auto-resume on next launch)
+
+  const handleStartAll = useCallback(async (forceSynced?: boolean, overrideInterval?: number) => {
     const allConfigs = await getAllMonitorConfigs();
 
     const perMonitor: { mid: string; paths: string[]; interval: number; mode: "Sequential" | "Shuffle" }[] = [];
@@ -518,7 +536,7 @@ function App() {
         perMonitor.push({
           mid,
           paths: finalPaths,
-          interval: cfg.interval,
+          interval: overrideInterval ?? cfg.interval,
           mode: cfg.mode,
         });
       }
@@ -539,6 +557,42 @@ function App() {
     await refresh();
   }, [syncEnabled, startFiles, refresh]);
 
+  // Auto-resume slideshow on startup: schedule > active profile > stored config
+  useEffect(() => {
+    if (autoResumed || monitors.length === 0) return;
+    setAutoResumed(true);
+    (async () => {
+      try {
+        // 1. Check if schedule is active and has a matching slot right now
+        const scheduleStore = await load("schedule.json", { autoSave: true, defaults: {} });
+        const savedSchedule = await scheduleStore.get<Schedule>("schedule");
+        if (savedSchedule?.enabled) {
+          // Schedule timer was started in an earlier effect and will fire
+          // "schedule-slot-changed" event with the correct profile.
+          // Don't start anything here — let the schedule listener handle it
+          // to avoid a brief flash of the wrong profile.
+          return;
+        }
+
+        // 2. Load last active profile if available
+        if (activeProfileId) {
+          const prof = profiles.find((p) => p.id === activeProfileId);
+          if (prof) {
+            await handleLoadProfile(prof.id, true);
+            return;
+          }
+        }
+
+        // 3. Fallback: start with whatever is in the store
+        const configs = await getAllMonitorConfigs();
+        const hasAny = Object.values(configs).some((c) => c.images?.length > 0);
+        if (hasAny) {
+          await handleStartAll();
+        }
+      } catch { /* */ }
+    })();
+  }, [monitors, autoResumed]);
+
   const handleToggleZen = useCallback(async () => {
     try {
       const anyRunningNow = Object.values(statuses).some((s) => s.is_running);
@@ -550,13 +604,20 @@ function App() {
       if (active) {
         // Entering zen mode: save current slideshow state
         wasRunningBeforeZen.current = anyRunningNow;
-        // If not running, start all slideshows with synced timers
-        if (!anyRunningNow) {
-          await handleStartAll(true);
-        }
+        // Load zen interval from settings (default 30s)
+        let zenInterval = 30;
+        try {
+          const store = await load("settings.json", { autoSave: true, defaults: {} });
+          const saved = await store.get<number>("zenInterval");
+          if (saved) zenInterval = saved;
+        } catch { /* */ }
+        // Always restart with zen interval (synced across monitors)
+        await handleStartAll(true, zenInterval);
       } else {
-        // Exiting zen mode: if slideshow wasn't running before, stop it
-        if (!wasRunningBeforeZen.current) {
+        // Exiting zen mode: restore original intervals by restarting
+        if (wasRunningBeforeZen.current) {
+          await handleStartAll();
+        } else {
           await pause();
         }
       }
@@ -843,6 +904,17 @@ function App() {
             </svg>
           </button>
 
+          {/* FAQ */}
+          <button
+            onClick={() => setFaqOpen(true)}
+            className="rounded-full p-2 text-ds-text-muted transition hover:bg-ds-card-hover hover:text-ds-text"
+            title={t("faq.title")}
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
           {/* Settings gear */}
           <button
             onClick={() => { setSettingsTab("general"); setSettingsOpen(true); }}
@@ -971,6 +1043,7 @@ function App() {
         monitorIds={monitors.map((m) => m.id)}
         profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
       />
+      <FaqModal open={faqOpen} onClose={() => setFaqOpen(false)} />
       <ToastProvider />
     </div>
   );

@@ -254,3 +254,28 @@ pub fn update_tray_locale(
     // Rebuild tray with new locale
     tray::build_tray(&app, &locale).map_err(|e| format!("Failed to update tray: {}", e))
 }
+
+// ── Open folder in file explorer ────────────────────────────────────
+
+#[tauri::command]
+pub fn open_folder(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err(format!("Path not found: {}", path));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    Ok(())
+}

@@ -211,14 +211,17 @@ export function Settings({
   const [closeToTray, setCloseToTray] = useState(true);
   const [pauseOnFullscreen, setPauseOnFullscreen] = useState(false);
   const [langPref, setLangPref] = useState<string>(i18n.language);
+  const [zenInterval, setZenInterval] = useState(30);
 
-  // Load saved language preference + fullscreen pause setting
+  // Load saved language preference + fullscreen pause setting + zen interval
   useEffect(() => {
     import("@tauri-apps/plugin-store").then(m => m.load("settings.json", { autoSave: true, defaults: {} })).then(async (store) => {
       const saved = await store.get<string>("language");
       if (saved) setLangPref(saved);
       const fsPause = await store.get<boolean>("pause_on_fullscreen");
       if (fsPause) setPauseOnFullscreen(true);
+      const savedZenInterval = await store.get<number>("zenInterval");
+      if (savedZenInterval) setZenInterval(savedZenInterval);
     }).catch(() => {});
   }, []);
 
@@ -267,6 +270,16 @@ export function Settings({
       const store = await import("@tauri-apps/plugin-store").then(m => m.load("settings.json", { autoSave: true, defaults: {} }));
       await store.set("language", lng);
     }
+  };
+
+  const handleZenIntervalChange = async (val: number) => {
+    const clamped = Math.max(5, Math.min(3600, val));
+    setZenInterval(clamped);
+    try {
+      const { load } = await import("@tauri-apps/plugin-store");
+      const store = await load("settings.json", { autoSave: true, defaults: {} });
+      await store.set("zenInterval", clamped);
+    } catch { /* */ }
   };
 
   const handleHotkeyChange = (action: string, shortcut: string) => {
@@ -372,6 +385,20 @@ export function Settings({
                   <div className="flex items-center justify-between" title={t("settings.pause_on_fullscreen_tip")}>
                     <span className="text-sm text-ds-text">{t("settings.pause_on_fullscreen")}</span>
                     <Toggle checked={pauseOnFullscreen} onChange={handleFullscreenPauseToggle} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ds-text">{t("settings.zen_interval")}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={5}
+                        max={3600}
+                        value={zenInterval}
+                        onChange={(e) => handleZenIntervalChange(parseInt(e.target.value, 10) || 30)}
+                        className="w-20 rounded-lg border border-ds-border bg-ds-bg/50 px-2.5 py-1.5 text-right text-sm text-ds-text focus:border-ds-accent/50 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                      <span className="text-xs text-ds-text-muted">{t("settings.zen_seconds")}</span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-ds-text">{t("settings.language")}</span>

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
+import { listen } from "@tauri-apps/api/event";
 import {
   getSchedule,
   setSchedule as saveScheduleBackend,
@@ -65,6 +66,18 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds, profiles = []
     if (isOpen) loadSchedule();
   }, [isOpen, loadSchedule]);
 
+  // Listen for real-time slot changes while modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const unlisten = listen<{ slot_name: string }>(
+      "schedule-slot-changed",
+      (event) => {
+        setActiveSlotName(event.payload.slot_name);
+      },
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, [isOpen]);
+
   const persistSchedule = async (sched: Schedule) => {
     try {
       await saveScheduleBackend(sched);
@@ -106,6 +119,16 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds, profiles = []
 
   const handleRemoveSlot = async (index: number) => {
     const updated = { ...schedule, slots: schedule.slots.filter((_, i) => i !== index) };
+    setSchedule(updated);
+    await persistSchedule(updated);
+  };
+
+  const handleMoveSlot = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= schedule.slots.length) return;
+    const slots = [...schedule.slots];
+    [slots[index], slots[target]] = [slots[target], slots[index]];
+    const updated = { ...schedule, slots };
     setSchedule(updated);
     await persistSchedule(updated);
   };
@@ -153,7 +176,7 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds, profiles = []
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-ds-border bg-ds-card shadow-2xl"
+            className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl border border-ds-border bg-ds-card shadow-2xl"
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-ds-border px-6 py-4">
@@ -188,19 +211,37 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds, profiles = []
                 </div>
               )}
 
+              {/* Priority notice */}
+              {schedule.slots.length > 1 && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-ds-bg/30 px-3 py-2">
+                  <svg className="h-3.5 w-3.5 shrink-0 text-ds-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-[10px] text-ds-text/60">{t("schedule.priority_notice")}</span>
+                </div>
+              )}
+
               {/* Slots */}
               <div className="space-y-3">
-                {schedule.slots.map((slot, idx) => (
+                {schedule.slots.map((slot, idx) => {
+                  const isActive = schedule.enabled && activeSlotName === slot.name;
+                  return (
                   <div
                     key={idx}
-                    className={`rounded-xl border p-4 space-y-3 ${
-                      activeSlotName === slot.name
-                        ? "border-ds-accent/30 bg-ds-accent/5"
+                    className={`rounded-xl border p-4 space-y-3 transition-colors ${
+                      isActive
+                        ? "border-ds-accent/50 bg-ds-accent/10 ring-1 ring-ds-accent/20"
                         : "border-ds-border bg-ds-bg/30"
                     }`}
                   >
                     {/* Slot header */}
                     <div className="flex items-center gap-2">
+                      {isActive && (
+                        <span className="flex h-2 w-2 shrink-0">
+                          <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-ds-accent opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-ds-accent" />
+                        </span>
+                      )}
                       <input
                         type="text"
                         value={slot.name}
@@ -212,15 +253,39 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds, profiles = []
                         type="time"
                         value={slot.start_time}
                         onChange={(e) => handleSlotChange(idx, { start_time: e.target.value })}
-                        className="w-[110px] shrink-0 rounded-lg border border-ds-border bg-ds-bg/50 px-2 py-1.5 text-sm text-ds-text focus:border-ds-accent/50 focus:outline-none"
+                        className="w-[130px] shrink-0 rounded-lg border border-ds-border bg-ds-bg/50 px-3 py-1.5 text-sm text-ds-text focus:border-ds-accent/50 focus:outline-none"
                       />
                       <span className="shrink-0 text-xs text-ds-text">~</span>
                       <input
                         type="time"
                         value={slot.end_time}
                         onChange={(e) => handleSlotChange(idx, { end_time: e.target.value })}
-                        className="w-[110px] shrink-0 rounded-lg border border-ds-border bg-ds-bg/50 px-2 py-1.5 text-sm text-ds-text focus:border-ds-accent/50 focus:outline-none"
+                        className="w-[130px] shrink-0 rounded-lg border border-ds-border bg-ds-bg/50 px-3 py-1.5 text-sm text-ds-text focus:border-ds-accent/50 focus:outline-none"
                       />
+                      {schedule.slots.length > 1 && (
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={() => handleMoveSlot(idx, -1)}
+                            disabled={idx === 0}
+                            className="rounded p-1 text-ds-text/50 transition hover:bg-ds-accent/10 hover:text-ds-accent disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ds-text/50"
+                            title={t("schedule.move_up")}
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleMoveSlot(idx, 1)}
+                            disabled={idx === schedule.slots.length - 1}
+                            className="rounded p-1 text-ds-text/50 transition hover:bg-ds-accent/10 hover:text-ds-accent disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ds-text/50"
+                            title={t("schedule.move_down")}
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
                       {schedule.slots.length > 1 && (
                         <button
                           onClick={() => handleRemoveSlot(idx)}
@@ -302,7 +367,7 @@ export function ScheduleModal({ open: isOpen, onClose, monitorIds, profiles = []
                     </div>
                     )}
                   </div>
-                ))}
+                ); })}
               </div>
 
               {/* Add slot button */}
