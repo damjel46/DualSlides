@@ -27,6 +27,7 @@
     "deselect_all_tip": "Alle Bilder aus der Diashow ausschließen",
     "delete_all": "Alle löschen",
     "delete_all_tip": "Alle Bildquellen entfernen",
+    "drop_images": "Bilder hier ablegen",
     "select_monitor": "Wähle oben einen Monitor aus"
   },
   "slideshow": {

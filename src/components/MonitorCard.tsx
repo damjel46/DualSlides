@@ -342,6 +342,8 @@ export function MonitorCard({
   const [taskbarHidden, setTaskbarHidden] = useState(false);
   const [profileMenu, setProfileMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [profileEdit, setProfileEdit] = useState<{ id: string | null; name: string; thumbnail: string | null; isNew?: boolean } | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // Close profile context menu on click outside
   useEffect(() => {
@@ -511,6 +513,46 @@ export function MonitorCard({
     });
   };
 
+  const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "bmp", "webp"]);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    if (dragCounterRef.current === 1) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDraggingOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    const imagePaths = files
+      .map((f) => (f as unknown as { path: string }).path)
+      .filter((p) => p && IMAGE_EXTS.has(p.split(".").pop()?.toLowerCase() ?? ""));
+
+    if (imagePaths.length === 0) return;
+    const existing = new Set(selectedFiles);
+    const newFiles = imagePaths.filter((p) => !existing.has(p));
+    if (newFiles.length > 0) {
+      update({ selectedFiles: [...selectedFiles, ...newFiles] });
+    }
+  };
+
   const handleSelectFiles = async () => {
     const selected = await open({
       directory: false,
@@ -582,7 +624,22 @@ export function MonitorCard({
   if (!loaded) return null;
 
   return (
-    <div className="rounded-2xl border border-ds-border bg-ds-card overflow-hidden">
+    <div
+      className={`rounded-2xl border bg-ds-card overflow-hidden relative transition-colors ${isDraggingOver ? "border-ds-accent/70" : "border-ds-border"}`}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag-and-drop overlay */}
+      {isDraggingOver && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-2xl bg-ds-accent/10 backdrop-blur-sm pointer-events-none">
+          <svg className="h-10 w-10 text-ds-accent-light" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0 0V8m0 4h4m-4 0H8m12 4.5A9 9 0 1 1 3 12a9 9 0 0 1 18 0z" />
+          </svg>
+          <span className="text-sm font-semibold text-ds-accent-light">{t("monitor.drop_images")}</span>
+        </div>
+      )}
 
       <div className="p-5">
       {/* Header + Source — hidden in horizontal layout (shown in MonitorSource instead) */}

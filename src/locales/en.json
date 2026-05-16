@@ -27,6 +27,7 @@
     "deselect_all_tip": "Exclude all images from slideshow",
     "delete_all": "Delete all",
     "delete_all_tip": "Remove all image sources",
+    "drop_images": "Drop images here",
     "select_monitor": "Select a monitor above to configure"
   },
   "slideshow": {

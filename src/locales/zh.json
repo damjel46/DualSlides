@@ -27,6 +27,7 @@
     "deselect_all_tip": "将所有图片从幻灯片中移除",
     "delete_all": "全部删除",
     "delete_all_tip": "移除所有图片来源",
+    "drop_images": "拖放图片到此处",
     "select_monitor": "选择上方的显示器进行配置"
   },
   "slideshow": {
