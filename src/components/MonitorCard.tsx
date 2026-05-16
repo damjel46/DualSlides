@@ -435,12 +435,20 @@ export function MonitorCard({
   // Effective folders list: migrate from legacy single `folder` field
   const folders = foldersArr && foldersArr.length > 0 ? foldersArr : folder ? [folder] : [];
 
+  // Track current source key — updated synchronously on every render so async scans
+  // can detect if the source has changed (profile switch) before calling update().
+  const scanKeyRef = useRef("");
+  scanKeyRef.current = [...folders, ...selectedFiles].join("|");
+
   // Shared scan function
   const scanImages = async (isInitial: boolean) => {
+    const capturedKey = scanKeyRef.current; // snapshot at scan start
     try {
       const folderImages: import("../lib/commands").ImageInfo[] = [];
       for (const f of folders) {
         const fresh = await getImagesFromFolder(f);
+        // Abort if sources changed while awaiting (profile switch happened)
+        if (scanKeyRef.current !== capturedKey) return;
         folderImages.push(...fresh);
       }
       const fileImages: import("../lib/commands").ImageInfo[] = selectedFiles.map((p) => ({
@@ -463,6 +471,8 @@ export function MonitorCard({
         allFresh.length === images.length &&
         allFresh.every((f) => oldPaths.has(f.path))
       ) return;
+      // Final abort check before writing state
+      if (scanKeyRef.current !== capturedKey) return;
       if (isInitial && images.length === 0) {
         update({ images: allFresh, excluded: [] });
       } else {
