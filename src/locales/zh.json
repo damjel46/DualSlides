@@ -25,6 +25,8 @@
     "hide_taskbar_tip": "隐藏此显示器的Windows任务栏",
     "select_all_tip": "将所有图片加入幻灯片",
     "deselect_all_tip": "将所有图片从幻灯片中移除",
+    "delete_all": "全部删除",
+    "delete_all_tip": "移除所有图片来源",
     "select_monitor": "选择上方的显示器进行配置"
   },
   "slideshow": {
@@ -76,7 +78,8 @@
     "toggle": "收藏",
     "add": "已添加到收藏",
     "remove": "已从收藏移除",
-    "filter": "仅显示收藏"
+    "filter": "仅显示收藏",
+    "no_favorites": "没有收藏的图片"
   },
   "profile": {
     "name": "配置名称",
@@ -88,6 +91,7 @@
     "delete": "删除配置",
     "load_confirm": "加载配置'{{name}}'？当前设置将被替换。",
     "applied": "配置'{{name}}'已应用",
+    "switching": "正在切换配置...",
     "saved": "配置已保存",
     "max": "最多6个配置",
     "thumbnail": "缩略图",
@@ -121,6 +125,7 @@
     "priority_notice": "时间重叠时，排在上面的计划优先生效。可用箭头调整顺序。",
     "move_up": "上移",
     "move_down": "下移",
+    "same_time_warning": "开始和结束时间相同会创建24小时时间段，阻止其他计划生效",
     "select_folders": "为每个显示器选择文件夹",
     "no_profile": "指定配置",
     "use_profile": "使用配置",
@@ -176,6 +181,7 @@
     "trouble_3": "如果快捷键不起作用，可能是其他程序占用了相同的按键组合",
     "trouble_4": "已删除的文件夹在幻灯片播放时会自动跳过",
     "trouble_5": "设置文件损坏时会自动重置为默认值",
+    "trouble_6": "如果壁纸淡入淡出效果不起作用：设置 → 辅助功能 → 视觉效果 → 开启动画效果",
     "contact": "联系我们:"
   }
 }

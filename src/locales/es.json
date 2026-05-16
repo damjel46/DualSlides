@@ -25,6 +25,8 @@
     "hide_taskbar_tip": "Ocultar la barra de tareas de Windows en este monitor",
     "select_all_tip": "Incluir todas las imágenes en la presentación",
     "deselect_all_tip": "Excluir todas las imágenes de la presentación",
+    "delete_all": "Eliminar todo",
+    "delete_all_tip": "Eliminar todas las fuentes de imágenes",
     "select_monitor": "Seleccione un monitor arriba para configurar"
   },
   "slideshow": {
@@ -76,7 +78,8 @@
     "toggle": "Favorito",
     "add": "Añadido a favoritos",
     "remove": "Eliminado de favoritos",
-    "filter": "Solo favoritos"
+    "filter": "Solo favoritos",
+    "no_favorites": "No hay imágenes favoritas"
   },
   "profile": {
     "name": "Nombre del perfil",
@@ -88,6 +91,7 @@
     "delete": "Eliminar perfil",
     "load_confirm": "¿Cargar perfil '{{name}}'? La configuración actual será reemplazada.",
     "applied": "Perfil '{{name}}' aplicado",
+    "switching": "Cambiando perfil...",
     "saved": "Perfil guardado",
     "max": "Máximo 6 perfiles",
     "thumbnail": "Miniatura",
@@ -121,6 +125,7 @@
     "priority_notice": "Cuando los horarios se superponen, el primero de la lista tiene prioridad. Usa las flechas para reordenar.",
     "move_up": "Mover arriba",
     "move_down": "Mover abajo",
+    "same_time_warning": "Misma hora de inicio y fin crea un horario de 24 horas que bloquea otros horarios",
     "select_folders": "Seleccionar carpetas para cada monitor",
     "no_profile": "Asignar perfil",
     "use_profile": "Usar perfil",
@@ -176,6 +181,7 @@
     "trouble_3": "Si los atajos no funcionan, otro programa puede estar usando la misma combinación de teclas",
     "trouble_4": "Las carpetas eliminadas se omiten automáticamente durante la presentación",
     "trouble_5": "Los archivos de configuración dañados se restablecen automáticamente a valores predeterminados",
+    "trouble_6": "Si la transición de fondo no funciona: Configuración → Accesibilidad → Efectos visuales → activar Efectos de animación",
     "contact": "Contacto:"
   }
 }

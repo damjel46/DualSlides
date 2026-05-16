@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { Toggle } from "./Settings";
+import { toast } from "./Toast";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getImagesFromFolder, setTaskbarVisible, getTaskbarVisible, openFolder } from "../lib/commands";
@@ -700,7 +701,7 @@ export function MonitorCard({
           </div>
 
           {/* Select all / Deselect all / Favorites filter */}
-          <div className="mb-1.5 flex gap-2 text-[10px]">
+          <div className="mb-1.5 flex items-center gap-2 text-[10px]">
             <button
               onClick={() => update({ excluded: [] })}
               title={t("monitor.select_all_tip")}
@@ -718,7 +719,13 @@ export function MonitorCard({
               {t("monitor.deselect_all")}
             </button>
             <button
-              onClick={() => setFilterFavorites(!filterFavorites)}
+              onClick={() => {
+                if (!filterFavorites && favorites.size === 0) {
+                  toast(t("favorite.no_favorites"), "warning");
+                  return;
+                }
+                setFilterFavorites(!filterFavorites);
+              }}
               className={`flex items-center gap-1 rounded-md border px-2 py-0.5 font-medium transition active:scale-95 ${
                 filterFavorites
                   ? "border-red-400/40 bg-red-500/15 text-red-400"
@@ -729,6 +736,16 @@ export function MonitorCard({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
               {t("favorite.filter")}
+            </button>
+            <button
+              onClick={() => { onStop(monitor.id); update({ folders: [], selectedFiles: [], images: [], excluded: [] }); }}
+              title={t("monitor.delete_all_tip")}
+              className="ml-auto flex items-center gap-1 rounded-md border border-red-500/30 px-2 py-0.5 font-medium text-red-400/70 transition hover:border-red-500/60 hover:bg-red-500/10 hover:text-red-400 active:scale-95"
+            >
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              {t("monitor.delete_all")}
             </button>
           </div>
 
