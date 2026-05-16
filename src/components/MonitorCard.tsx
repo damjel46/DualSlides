@@ -515,23 +515,45 @@ export function MonitorCard({
 
   const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "bmp", "webp"]);
 
+  // Show overlay as soon as a file drag enters the app window
+  useEffect(() => {
+    const onWindowDragEnter = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) {
+        dragCounterRef.current += 1;
+        setIsDraggingOver(true);
+      }
+    };
+    const onWindowDragLeave = (e: DragEvent) => {
+      // relatedTarget === null means the cursor left the browser window
+      if (e.relatedTarget === null) {
+        dragCounterRef.current = 0;
+        setIsDraggingOver(false);
+      }
+    };
+    const onWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDraggingOver(false);
+    };
+    const onWindowDragEnd = () => {
+      dragCounterRef.current = 0;
+      setIsDraggingOver(false);
+    };
+
+    window.addEventListener("dragenter", onWindowDragEnter);
+    window.addEventListener("dragleave", onWindowDragLeave);
+    window.addEventListener("drop", onWindowDrop);
+    window.addEventListener("dragend", onWindowDragEnd);
+    return () => {
+      window.removeEventListener("dragenter", onWindowDragEnter);
+      window.removeEventListener("dragleave", onWindowDragLeave);
+      window.removeEventListener("drop", onWindowDrop);
+      window.removeEventListener("dragend", onWindowDragEnd);
+    };
+  }, []);
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current += 1;
-    if (dragCounterRef.current === 1) setIsDraggingOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current -= 1;
-    if (dragCounterRef.current === 0) setIsDraggingOver(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -627,8 +649,6 @@ export function MonitorCard({
     <div
       className={`rounded-2xl border bg-ds-card overflow-hidden relative transition-colors ${isDraggingOver ? "border-ds-accent/70" : "border-ds-border"}`}
       onDragOver={handleDragOver}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Drag-and-drop overlay */}
