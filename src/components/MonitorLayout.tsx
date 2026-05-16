@@ -39,6 +39,7 @@ interface MonitorLayoutProps {
   zenActive: boolean;
   onToggleZen: () => void;
   layout?: "vertical" | "horizontal";
+  clearedMonitorIds?: Set<string>;
 }
 
 export function MonitorLayout({
@@ -49,6 +50,7 @@ export function MonitorLayout({
   zenActive,
   onToggleZen,
   layout = "vertical",
+  clearedMonitorIds,
 }: MonitorLayoutProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -134,7 +136,7 @@ export function MonitorLayout({
           const status = statuses[monitor.id];
           const isSelected = selectedIndex === i;
           const isRunning = status?.is_running ?? false;
-          const thumbSrc = (status?.is_running && status?.current_image)
+          const thumbSrc = (status?.current_image && !clearedMonitorIds?.has(monitor.id))
             ? convertFileSrc(status.current_image)
             : null;
 

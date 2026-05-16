@@ -49,6 +49,7 @@ function App() {
   const [faqOpen, setFaqOpen] = useState(false);
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [clearedMonitorIds, setClearedMonitorIds] = useState<Set<string>>(new Set());
 
   // Detect OS file drag entering/leaving the app window via Tauri API
   useEffect(() => {
@@ -271,7 +272,24 @@ function App() {
     toast(t("profile.saved"), "success");
   };
 
+  // When a new wallpaper plays on a previously cleared monitor, un-clear it
+  useEffect(() => {
+    setClearedMonitorIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      let changed = false;
+      for (const mid of prev) {
+        if (statuses[mid]?.is_running) {
+          next.delete(mid);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [statuses]);
+
   const handleDeleteAllForMonitor = (monitorId: string) => {
+    setClearedMonitorIds((prev) => new Set([...prev, monitorId]));
     if (!activeProfileIdRef.current) return;
     setProfiles((prev) => {
       const updated = prev.map((p) => {
@@ -1037,6 +1055,7 @@ function App() {
                 zenActive={zenActive}
                 onToggleZen={handleToggleZen}
                 layout={layout}
+                clearedMonitorIds={clearedMonitorIds}
               />
               {layout === "horizontal" && selectedMon && (
                 <MonitorSource monitor={selectedMon} />

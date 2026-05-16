@@ -87,15 +87,19 @@ export function useMonitorConfig(monitorId: string, reloadKey?: number) {
   useEffect(() => {
     if (!ready || saving.current || loadedForId.current !== monitorId) return;
     saving.current = true;
+    const saveGen = loadGeneration.current; // snapshot generation at save time
     (async () => {
       try {
         const store = await getStore();
+        // Abort if a profile load (reloadKey change) started after this save was queued
+        if (saveGen !== loadGeneration.current) return;
         await store.set(monitorId, config);
       } catch {
         // ignore
       }
-      // Delay resetting flag to prevent onKeyChange from overwriting
-      setTimeout(() => { saving.current = false; }, 100);
+      setTimeout(() => {
+        if (saveGen === loadGeneration.current) saving.current = false;
+      }, 100);
     })();
   }, [monitorId, config, ready]);
 
