@@ -303,6 +303,7 @@ interface MonitorCardProps {
   onSetProfileThumbnail: (id: string, path: string) => void;
   onRenameProfile: (id: string, name: string) => void;
   onUpdateProfile: (id: string) => void;
+  onDeleteAll: (monitorId: string) => void;
   configReloadKey?: number;
 }
 
@@ -335,6 +336,7 @@ export function MonitorCard({
   onSetProfileThumbnail,
   onRenameProfile,
   onUpdateProfile,
+  onDeleteAll,
   configReloadKey,
 }: MonitorCardProps) {
   const { t } = useTranslation();
@@ -774,7 +776,7 @@ export function MonitorCard({
               {t("favorite.filter")}
             </button>
             <button
-              onClick={() => { onStop(monitor.id); update({ folders: [], selectedFiles: [], images: [], excluded: [] }); }}
+              onClick={() => { onStop(monitor.id); update({ folders: [], selectedFiles: [], images: [], excluded: [] }); onDeleteAll(monitor.id); }}
               title={t("monitor.delete_all_tip")}
               className="ml-auto flex items-center gap-1 rounded-md border border-red-500/30 px-2 py-0.5 font-medium text-red-400/70 transition hover:border-red-500/60 hover:bg-red-500/10 hover:text-red-400 active:scale-95"
             >

@@ -134,7 +134,7 @@ export function MonitorLayout({
           const status = statuses[monitor.id];
           const isSelected = selectedIndex === i;
           const isRunning = status?.is_running ?? false;
-          const thumbSrc = status?.current_image
+          const thumbSrc = (status?.is_running && status?.current_image)
             ? convertFileSrc(status.current_image)
             : null;
 

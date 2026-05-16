@@ -271,6 +271,26 @@ function App() {
     toast(t("profile.saved"), "success");
   };
 
+  const handleDeleteAllForMonitor = (monitorId: string) => {
+    if (!activeProfileIdRef.current) return;
+    setProfiles((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id !== activeProfileIdRef.current) return p;
+        const monData = p.monitors[monitorId];
+        if (!monData) return p;
+        return {
+          ...p,
+          monitors: {
+            ...p.monitors,
+            [monitorId]: { ...monData, folders: [], selectedFiles: [], images: [], excluded: [] },
+          },
+        };
+      });
+      persistProfiles(updated, activeProfileIdRef.current);
+      return updated;
+    });
+  };
+
   const handleDeleteProfile = async (id: string) => {
     const updated = profiles.filter((p) => p.id !== id);
     const newActiveId = activeProfileId === id ? null : activeProfileId;
@@ -1046,6 +1066,7 @@ function App() {
                 onSetProfileThumbnail={handleSetProfileThumbnail}
                 onRenameProfile={handleRenameProfile}
                 onUpdateProfile={handleUpdateProfile}
+                onDeleteAll={handleDeleteAllForMonitor}
                 configReloadKey={configReloadKey}
               />
             ) : (
