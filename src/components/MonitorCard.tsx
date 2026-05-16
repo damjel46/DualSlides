@@ -342,8 +342,7 @@ export function MonitorCard({
   const [taskbarHidden, setTaskbarHidden] = useState(false);
   const [profileMenu, setProfileMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [profileEdit, setProfileEdit] = useState<{ id: string | null; name: string; thumbnail: string | null; isNew?: boolean } | null>(null);
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const dragCounterRef = useRef(0);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   // Close profile context menu on click outside
   useEffect(() => {
@@ -515,65 +514,36 @@ export function MonitorCard({
 
   const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "bmp", "webp"]);
 
-  // Show overlay as soon as a file drag enters the app window
+  // Handle file drop via Tauri API — check if drop position is within this card
+  const selectedFilesRef = useRef(selectedFiles);
+  const updateRef = useRef(update);
+  useEffect(() => { selectedFilesRef.current = selectedFiles; }, [selectedFiles]);
+  useEffect(() => { updateRef.current = update; }, [update]);
+
   useEffect(() => {
-    const onWindowDragEnter = (e: DragEvent) => {
-      if (e.dataTransfer?.types.includes("Files")) {
-        dragCounterRef.current += 1;
-        setIsDraggingOver(true);
-      }
-    };
-    const onWindowDragLeave = (e: DragEvent) => {
-      // relatedTarget === null means the cursor left the browser window
-      if (e.relatedTarget === null) {
-        dragCounterRef.current = 0;
-        setIsDraggingOver(false);
-      }
-    };
-    const onWindowDrop = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounterRef.current = 0;
-      setIsDraggingOver(false);
-    };
-    const onWindowDragEnd = () => {
-      dragCounterRef.current = 0;
-      setIsDraggingOver(false);
-    };
+    let unlisten: (() => void) | undefined;
+    import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => {
+      getCurrentWebview().onDragDropEvent((e) => {
+        if (e.payload.type !== "drop") return;
+        const { x, y } = e.payload.position;
+        const rect = cardRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
 
-    window.addEventListener("dragenter", onWindowDragEnter);
-    window.addEventListener("dragleave", onWindowDragLeave);
-    window.addEventListener("drop", onWindowDrop);
-    window.addEventListener("dragend", onWindowDragEnd);
-    return () => {
-      window.removeEventListener("dragenter", onWindowDragEnter);
-      window.removeEventListener("dragleave", onWindowDragLeave);
-      window.removeEventListener("drop", onWindowDrop);
-      window.removeEventListener("dragend", onWindowDragEnd);
-    };
+        const imagePaths = e.payload.paths.filter((p) =>
+          IMAGE_EXTS.has(p.split(".").pop()?.toLowerCase() ?? "")
+        );
+        if (imagePaths.length === 0) return;
+        const existing = new Set(selectedFilesRef.current);
+        const newFiles = imagePaths.filter((p) => !existing.has(p));
+        if (newFiles.length > 0) {
+          updateRef.current({ selectedFiles: [...selectedFilesRef.current, ...newFiles] });
+        }
+      }).then((fn) => { unlisten = fn; });
+    });
+    return () => { unlisten?.(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current = 0;
-    setIsDraggingOver(false);
-
-    const files = Array.from(e.dataTransfer.files);
-    const imagePaths = files
-      .map((f) => (f as unknown as { path: string }).path)
-      .filter((p) => p && IMAGE_EXTS.has(p.split(".").pop()?.toLowerCase() ?? ""));
-
-    if (imagePaths.length === 0) return;
-    const existing = new Set(selectedFiles);
-    const newFiles = imagePaths.filter((p) => !existing.has(p));
-    if (newFiles.length > 0) {
-      update({ selectedFiles: [...selectedFiles, ...newFiles] });
-    }
-  };
 
   const handleSelectFiles = async () => {
     const selected = await open({
@@ -647,20 +617,9 @@ export function MonitorCard({
 
   return (
     <div
-      className={`rounded-2xl border bg-ds-card overflow-hidden relative transition-colors ${isDraggingOver ? "border-ds-accent/70" : "border-ds-border"}`}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      ref={cardRef}
+      className="rounded-2xl border border-ds-border bg-ds-card overflow-hidden"
     >
-      {/* Drag-and-drop overlay */}
-      {isDraggingOver && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-2xl bg-ds-accent/10 backdrop-blur-sm pointer-events-none">
-          <svg className="h-10 w-10 text-ds-accent-light" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0 0V8m0 4h4m-4 0H8m12 4.5A9 9 0 1 1 3 12a9 9 0 0 1 18 0z" />
-          </svg>
-          <span className="text-sm font-semibold text-ds-accent-light">{t("monitor.drop_images")}</span>
-        </div>
-      )}
-
       <div className="p-5">
       {/* Header + Source — hidden in horizontal layout (shown in MonitorSource instead) */}
       {layout !== "horizontal" && (

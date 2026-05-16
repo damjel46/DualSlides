@@ -18,6 +18,7 @@ import { useTheme } from "./hooks/useTheme";
 import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule, setFullscreenPauseEnabled, setTaskbarVisible, getTaskbarVisible } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LAYOUT_SIZES } from "./lib/layout";
 import { ToastProvider, toast } from "./components/Toast";
 import type { Schedule } from "./lib/commands";
@@ -47,6 +48,20 @@ function App() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+  // Detect OS file drag entering/leaving the app window via Tauri API
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    getCurrentWebview().onDragDropEvent((e) => {
+      if (e.payload.type === "enter" || e.payload.type === "over") {
+        setIsDraggingFile(true);
+      } else {
+        setIsDraggingFile(false);
+      }
+    }).then((fn) => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, []);
 
   // Auto-select primary monitor on first load
   useEffect(() => {
@@ -85,6 +100,13 @@ function App() {
   }
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const profilesRef = useRef<Profile[]>([]);
+  const activeProfileIdRef = useRef<string | null>(null);
+
+  // Keep refs in sync
+  useEffect(() => { profilesRef.current = profiles; }, [profiles]);
+  useEffect(() => { activeProfileIdRef.current = activeProfileId; }, [activeProfileId]);
 
   useEffect(() => {
     load("profiles.json", { autoSave: true, defaults: {} }).then(async (store) => {
@@ -92,7 +114,8 @@ function App() {
       if (saved) setProfiles(saved);
       const activeId = await store.get<string>("activeProfileId");
       if (activeId) setActiveProfileId(activeId);
-    }).catch(() => {});
+      setProfilesLoaded(true);
+    }).catch(() => { setProfilesLoaded(true); });
   }, []);
 
   const persistProfiles = async (p: Profile[], activeId: string | null) => {
@@ -153,9 +176,16 @@ function App() {
     toast(t("profile.saved"), "success");
   };
 
+  const profileSwitching = useRef(false);
   const handleLoadProfile = async (id: string, _skipConfirm = false) => {
+    if (profileSwitching.current) {
+      toast(t("profile.switching"), "info");
+      return;
+    }
+    profileSwitching.current = true;
+    try {
     const prof = profiles.find((p) => p.id === id);
-    if (!prof) return;
+    if (!prof) { profileSwitching.current = false; return; }
     // Stop current slideshow immediately to prevent stale images during config swap
     await pause();
     // Apply each monitor's config to the store
@@ -198,6 +228,9 @@ function App() {
     await persistProfiles(profiles, id);
     await handleStartAll();
     toast(t("profile.applied", { name: prof.name }), "success");
+    } finally {
+      profileSwitching.current = false;
+    }
   };
 
   const handleUpdateProfile = async (id: string) => {
@@ -232,7 +265,7 @@ function App() {
       const prof = prev.find((p) => p.id === id);
       if (!prof) return prev;
       const updated = prev.map((p) => p.id === id ? { ...p, monitors: monitorsData } : p);
-      persistProfiles(updated, activeProfileId);
+      persistProfiles(updated, activeProfileIdRef.current);
       return updated;
     });
     toast(t("profile.saved"), "success");
@@ -249,7 +282,7 @@ function App() {
   const handleSetProfileThumbnail = async (id: string, path: string) => {
     setProfiles((prev) => {
       const updated = prev.map((p) => p.id === id ? { ...p, thumbnail: path } : p);
-      persistProfiles(updated, activeProfileId);
+      persistProfiles(updated, activeProfileIdRef.current);
       return updated;
     });
   };
@@ -257,7 +290,7 @@ function App() {
   const handleRenameProfile = async (id: string, name: string) => {
     setProfiles((prev) => {
       const updated = prev.map((p) => p.id === id ? { ...p, name } : p);
-      persistProfiles(updated, activeProfileId);
+      persistProfiles(updated, activeProfileIdRef.current);
       return updated;
     });
   };
@@ -381,9 +414,9 @@ function App() {
         // Immediately pause current slideshow to prevent stale images during transition
         await pause();
 
-        // If slot has a profile, load it
+        // If slot has a profile, load it (use ref to always get latest profiles)
         if (profile_id) {
-          const prof = profiles.find((p) => p.id === profile_id);
+          const prof = profilesRef.current.find((p) => p.id === profile_id);
           if (prof) {
             await handleLoadProfile(prof.id, true);
             toast(t("schedule.current", { name: slot_name }), "info");
@@ -395,7 +428,6 @@ function App() {
 
         // Direct folder mapping
         const allConfigs = await getAllMonitorConfigs();
-        await pause();
 
         for (const [mid, folderPaths] of Object.entries(folders)) {
           if (!folderPaths || folderPaths.length === 0) continue;
@@ -421,7 +453,7 @@ function App() {
       },
     );
     return () => { unlisten.then((fn) => fn()); };
-  }, [startFiles, refresh, pause, profiles, handleLoadProfile, t]);
+  }, [startFiles, refresh, pause, handleLoadProfile, t]);
 
   // Track whether slideshow was running before zen mode
   const wasRunningBeforeZen = useRef(false);
@@ -436,7 +468,7 @@ function App() {
   };
 
   const handleToggleFavoriteCurrent = async () => {
-    if (!selectedMonitor) return;
+    if (selectedMonitor === null) return;
     const mon = monitors[selectedMonitor];
     if (!mon) return;
     const currentStatus = statuses[mon.id];
@@ -559,7 +591,7 @@ function App() {
 
   // Auto-resume slideshow on startup: schedule > active profile > stored config
   useEffect(() => {
-    if (autoResumed || monitors.length === 0) return;
+    if (autoResumed || monitors.length === 0 || !profilesLoaded) return;
     setAutoResumed(true);
     (async () => {
       try {
@@ -567,10 +599,24 @@ function App() {
         const scheduleStore = await load("schedule.json", { autoSave: true, defaults: {} });
         const savedSchedule = await scheduleStore.get<Schedule>("schedule");
         if (savedSchedule?.enabled) {
-          // Schedule timer was started in an earlier effect and will fire
-          // "schedule-slot-changed" event with the correct profile.
-          // Don't start anything here — let the schedule listener handle it
-          // to avoid a brief flash of the wrong profile.
+          // Schedule timer fires initial slot event on start_timer().
+          // Wait briefly for the schedule-slot-changed listener to handle it.
+          // If no slideshow starts within 3s (e.g. listener missed the event),
+          // fall back to handleStartAll.
+          await new Promise((r) => setTimeout(r, 3000));
+          const currentStatuses = await getAllMonitorConfigs();
+          const anyRunning = Object.keys(currentStatuses).length > 0;
+          if (anyRunning) {
+            // Check actual slideshow status from backend
+            try {
+              const { getSlideshowStatus } = await import("./lib/commands");
+              const st = await getSlideshowStatus();
+              const running = Object.values(st).some((s) => s.is_running);
+              if (!running) await handleStartAll();
+            } catch {
+              await handleStartAll();
+            }
+          }
           return;
         }
 
@@ -591,7 +637,7 @@ function App() {
         }
       } catch { /* */ }
     })();
-  }, [monitors, autoResumed]);
+  }, [monitors, autoResumed, profilesLoaded]);
 
   const handleToggleZen = useCallback(async () => {
     try {
@@ -1045,6 +1091,19 @@ function App() {
       />
       <FaqModal open={faqOpen} onClose={() => setFaqOpen(false)} />
       <ToastProvider />
+
+      {/* Full-window file drag overlay */}
+      {isDraggingFile && (
+        <div className="fixed inset-0 z-[500] pointer-events-none flex flex-col items-center justify-center gap-4 bg-ds-accent/10 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-ds-accent/40 bg-ds-bg/80 px-10 py-8 shadow-2xl">
+            <svg className="h-12 w-12 text-ds-accent-light" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <span className="text-base font-semibold text-ds-accent-light">{t("monitor.drop_images")}</span>
+            <span className="text-xs text-ds-text-muted">{t("monitor.drop_images_sub", { defaultValue: "Drop onto a monitor card" })}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

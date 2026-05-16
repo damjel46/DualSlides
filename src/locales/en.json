@@ -28,6 +28,7 @@
     "delete_all": "Delete all",
     "delete_all_tip": "Remove all image sources",
     "drop_images": "Drop images here",
+    "drop_images_sub": "Drop onto a monitor card",
     "select_monitor": "Select a monitor above to configure"
   },
   "slideshow": {
