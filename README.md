@@ -1,114 +1,189 @@
-# DualSlide
+# DualSlide 🖥️
 
-> Run independent slideshow wallpapers on each of your monitors — no stretching, no mirroring, no compromises.
+> **각 모니터마다 독립적인 슬라이드쇼 배경화면.**  
+> 폴더, 스케줄, 즐겨찾기, 단축키까지 — 멀티모니터 유저를 위한 Windows 배경화면 관리 앱.
 
 [![Steam](https://img.shields.io/badge/Steam-DualSlide-1b2838?logo=steam&logoColor=white)](https://store.steampowered.com/app/4631820/DualSlide/)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11-0078d4?logo=windows&logoColor=white)](https://store.steampowered.com/app/4631820/DualSlide/)
-[![Built with Tauri](https://img.shields.io/badge/Tauri-2.0-ffc131?logo=tauri&logoColor=white)](https://tauri.app)
-[![Price](https://img.shields.io/badge/Price-%242.00-brightgreen)](https://store.steampowered.com/app/4631820/DualSlide/)
+[![Tauri](https://img.shields.io/badge/Tauri-2.0-ffc131?logo=tauri&logoColor=white)](https://tauri.app)
+[![Price](https://img.shields.io/badge/Steam-%242.00-brightgreen)](https://store.steampowered.com/app/4631820/DualSlide/)
 
-Windows' built-in wallpaper settings apply the same image to every monitor. DualSlide lets each display run its own slideshow — different folders, different schedules, fully independent.
+<br>
 
----
+## 📱 스크린샷
 
-## Features
+| 대시보드 | 모니터 설정 | 스케줄 & 프로필 |
+|:---:|:---:|:---:|
+| ![대시보드](https://shared.akamai.steamstatic.com/community_assets/images/apps/4631820/a1ac9b9e9d41f46315ac0bf06bcbbabd9d4c654b.jpg) | ![모니터 설정](screenshots/monitor-settings.png) | ![스케줄](screenshots/schedule.png) |
 
-### Slideshow & Image Management
-- **Per-monitor independent slideshows** — assign different folders and image sources to each display
-- **Multi-source** — combine multiple folders and individual images into a single source pool per monitor
-- **Favorites** — mark images as favorites; they appear 3× more often in shuffle mode
-- **Pin** — lock the current image so the slideshow won't advance past it
-- **Supported formats**: JPG, JPEG, PNG, BMP, WEBP
+> 스크린샷은 실제 앱 화면으로 교체 예정
 
-### Automation & Scheduling
-- **Time-based schedule** — divide the day into up to 6 time slots and auto-switch image sources (e.g. landscapes in the morning, cityscapes at night)
-- **Auto-pause on fullscreen** — detects fullscreen apps and games, pauses automatically, resumes when you exit
+<br>
 
-### Display Control
-- **Monitor sync** — switch all monitors to the next/previous image simultaneously with one action
-- **Zen Mode** — one hotkey hides the taskbar and all desktop icons for a clean, distraction-free view
-- **Per-monitor taskbar** — independently show or hide the taskbar on each display
-- **Crossfade transitions** — smooth DWM crossfade between wallpapers; no hard cuts
+## 🚀 핵심 기능
 
-### System Integration
-- **Global hotkeys** — control previous / next / pause from any app in any context
-- **Profiles** — save your entire monitor configuration as a named profile and switch instantly
-- **System tray** — lives quietly in the background; always one click away
-- **Launch on startup** — auto-resumes your slideshow when Windows starts
-- **8 languages** — English, Korean, Japanese, Chinese, German, Spanish, French, Italian
+### 🗂️ 슬라이드쇼 & 이미지 관리
+- **모니터별 독립 슬라이드쇼** — 각 디스플레이에 서로 다른 폴더·이미지 소스를 할당, 완전히 독립 운영
+- **멀티 소스** — 여러 폴더와 개별 이미지를 혼합해 하나의 소스 풀로 구성
+- **즐겨찾기** — 마음에 드는 이미지를 즐겨찾기 등록, 셔플 시 3배 가중치로 자주 등장
+- **핀(Pin)** — 현재 이미지를 고정해 슬라이드쇼가 넘어가지 않도록 잠금
+- **지원 포맷** — JPG / JPEG / PNG / BMP / WEBP
 
----
+### ⏱️ 자동화 & 스케줄
+- **시간대 스케줄** — 하루를 최대 6슬롯으로 나눠 시간대별 이미지 소스 자동 전환 (출근 시간엔 풍경, 밤엔 야경)
+- **전체화면 자동 일시정지** — 게임·영상 플레이어 실행 시 자동 멈춤, 종료 후 재개
 
-## Tech Stack
+### 🎨 디스플레이 제어
+- **모니터 동기화** — 모든 모니터의 다음/이전 이미지를 한 번에 전환
+- **젠 모드(Zen Mode)** — 단축키 한 번으로 작업표시줄 + 바탕화면 아이콘 전부 숨김, 배경화면만 남겨 몰입 감상
+- **태스크바 제어** — 모니터별로 작업표시줄 표시/숨김을 독립적으로 설정
+- **크로스페이드 전환** — DWM 기반 부드러운 이미지 페이드 처리
 
-| Layer | Technology |
-|---|---|
-| App Framework | Tauri 2.0 |
-| Frontend | React 18 + TypeScript + Vite |
-| Backend | Rust + Tokio (async) |
-| Styling | Tailwind CSS + framer-motion |
-| Wallpaper Engine | more-wallpapers |
-| Settings | tauri-plugin-store (JSON) |
-| Global Hotkeys | tauri-plugin-global-shortcut |
-| Autostart | tauri-plugin-autostart |
-| i18n | i18next + react-i18next |
-| Image Validation | image crate |
-| Shuffle | rand crate |
+### ⌨️ 시스템 통합
+- **글로벌 핫키** — 어떤 앱이 포커스여도 이전/다음/일시정지 제어
+- **프로필** — 전체 모니터 구성을 프로필로 저장, 한 번에 전환
+- **시스템 트레이 상주** — 백그라운드에서 조용히 동작, 트레이 아이콘으로 빠른 접근
+- **부팅 시 자동 실행** — Windows 시작과 함께 슬라이드쇼 자동 재개
+- **8개 언어** — 영어, 한국어, 일본어, 중국어, 독일어, 스페인어, 프랑스어, 이탈리아어
 
----
+<br>
 
-## Getting Started
+## 🛠 기술 스택
 
-### Prerequisites
+| 영역 | 기술 |
+|------|------|
+| 앱 프레임워크 | Tauri 2.0 |
+| 프론트엔드 | React 18 + TypeScript + Vite |
+| 백엔드 | Rust + Tokio (비동기) |
+| UI 스타일 | Tailwind CSS + framer-motion |
+| 배경화면 엔진 | more-wallpapers (크로스플랫폼) |
+| 설정 저장 | tauri-plugin-store (JSON) |
+| 글로벌 핫키 | tauri-plugin-global-shortcut |
+| 자동 실행 | tauri-plugin-autostart |
+| 다국어 | i18next + react-i18next |
+| 이미지 검증 | image crate |
+| 셔플 | rand crate |
 
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) (stable toolchain)
+<br>
 
-### Development
+## 🏗 프로젝트 구조
+
+```
+src/
+├── components/
+│   ├── MonitorCard.tsx      # 모니터별 설정 카드
+│   ├── MonitorLayout.tsx    # 모니터 시각적 배치도
+│   ├── Settings.tsx         # 전체 설정 모달
+│   ├── HotkeyInput.tsx      # 핫키 녹화 입력
+│   └── ProUpgradeModal.tsx  # 업그레이드 모달
+├── hooks/
+│   ├── useMonitors.ts       # 모니터 목록
+│   ├── useSlideshow.ts      # 슬라이드쇼 상태
+│   └── useHotkeys.ts        # 핫키 관리
+├── locales/                 # en / ko / ja / zh / de / es / fr / it
+├── lib/
+│   ├── commands.ts          # Tauri 커맨드 래퍼
+│   └── i18n.ts              # i18next 초기화
+└── App.tsx
+
+src-tauri/src/
+├── main.rs                  # 앱 엔트리
+├── commands.rs              # Tauri 커맨드
+├── slideshow.rs             # 슬라이드쇼 엔진
+├── monitor.rs               # 모니터 감지 + 배경 설정
+├── hotkey.rs                # 글로벌 핫키
+├── window_mover.rs          # 창 모니터 간 이동
+└── profiles.rs              # 프로필 관리
+```
+
+<br>
+
+## ⚡ 주요 구현 포인트
+
+### 1. 모니터별 독립 슬라이드쇼 엔진
+
+각 모니터는 독립적인 `SlideshowEngine` 인스턴스를 가지며, `Arc<Mutex<>>` 로 스레드 안전하게 관리됩니다.  
+이미지는 경로만 저장하고 메모리에 로드하지 않아 RAM 점유를 최소화합니다.
+
+```rust
+// slideshow.rs
+pub struct SlideshowEngine {
+    monitors: HashMap<String, MonitorSlideshow>,
+    // 이미지 경로만 보관, 메모리 로드 없음
+}
+```
+
+### 2. 프로필 전환 레이스컨디션 방지
+
+프로필 전환 시 이전 `scanImages` 작업이 남아 있으면 `CancellationToken`으로 즉시 중단하고 새 스캔을 시작합니다.
+
+```rust
+// 기존 스캔 취소 후 새 소스로 재시작
+cancellation_token.cancel();
+let new_token = CancellationToken::new();
+spawn_scan(new_source, new_token);
+```
+
+### 3. 시간대 스케줄 자동 전환
+
+Tokio 비동기 타이머로 분 단위 체크를 실행, 현재 시각이 스케줄 슬롯에 진입하면 이미지 소스를 자동 교체합니다.
+
+```
+[0시 ~ 7시]  → 야경 폴더
+[7시 ~ 12시] → 풍경 폴더
+[12시 ~ 18시] → 도시 폴더
+[18시 ~ 24시] → 노을 폴더
+```
+
+### 4. 전체화면 자동 감지
+
+Windows API로 포그라운드 윈도우의 전체화면 여부를 주기적으로 폴링,  
+게임·영상 플레이어 진입 시 슬라이드쇼를 자동 일시정지하고 종료 후 재개합니다.
+
+<br>
+
+## 🔧 로컬 실행
 
 ```bash
+# 의존성 설치
 npm install
+
+# 개발 서버 실행
 npx tauri dev
-```
 
-### Build
-
-```bash
+# 프로덕션 빌드
 npx tauri build
+# → src-tauri/target/release/bundle/nsis/DualSlide_x.x.x_x64-setup.exe
 ```
 
-Output: `src-tauri/target/release/bundle/nsis/DualSlide_x.x.x_x64-setup.exe`
+**요구사항**
+- Node.js 18+
+- Rust (stable)
+- Windows 10/11 64-bit
 
----
+<br>
 
-## System Requirements
+## 📋 개발 이력
 
-| | Minimum |
+| 날짜 | 내용 |
+|------|------|
+| 2026-06 | Steam 출시, 아이콘 업데이트, 드래그앤드롭 개선 |
+| 2026-04 | 시간대 스케줄 + 멀티 소스 구현 |
+| 2026-03 | 즐겨찾기 & 핀 기능 구현 |
+| 2026-03 | 젠 모드 추가 (단축키 몰입 감상) |
+| 2026-03 | 모니터 동기화, 태스크바 제어 |
+| 2026-03 | Pro 티어 제거, 전 기능 무료 개방 |
+| 2026-03 | 초기 구현 — 멀티모니터 슬라이드쇼 엔진 |
+
+<br>
+
+## 📎 링크
+
+| | |
 |---|---|
-| OS | Windows 10 64-bit |
-| CPU | Intel Core i3 or equivalent |
-| RAM | 2 GB |
+| Steam 스토어 | https://store.steampowered.com/app/4631820/DualSlide/ |
+| GitHub | https://github.com/damjel46/DualSlides |
 
 ---
 
-## Changelog
-
-| Date | Changes |
-|---|---|
-| 2026-06 | Steam release, icon refresh, drag-and-drop improvements |
-| 2026-04 | Time-based schedule + multi-source support |
-| 2026-03 | Favorites & Pin implemented |
-| 2026-03 | Zen Mode — hotkey for immersive wallpaper view |
-| 2026-03 | Monitor sync + per-monitor taskbar control |
-| 2026-03 | All features made free (Pro tier removed) |
-| 2026-03 | Initial release — multi-monitor slideshow engine |
-
----
-
-## Links
-
-- [Steam Store](https://store.steampowered.com/app/4631820/DualSlide/)
-
----
-
-Built with [Tauri](https://tauri.app) — not Electron, so it stays lightweight and out of your RAM.
+Built with [Tauri](https://tauri.app) — Electron이 아니라서 가볍고 RAM을 잡아먹지 않습니다.
