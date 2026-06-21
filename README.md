@@ -1,73 +1,114 @@
-# React + TypeScript + Vite
+# DualSlide
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> Run independent slideshow wallpapers on each of your monitors — no stretching, no mirroring, no compromises.
 
-Currently, two official plugins are available:
+[![Steam](https://img.shields.io/badge/Steam-DualSlide-1b2838?logo=steam&logoColor=white)](https://store.steampowered.com/app/4631820/DualSlide/)
+[![Platform](https://img.shields.io/badge/Windows-10%2F11-0078d4?logo=windows&logoColor=white)](https://store.steampowered.com/app/4631820/DualSlide/)
+[![Built with Tauri](https://img.shields.io/badge/Tauri-2.0-ffc131?logo=tauri&logoColor=white)](https://tauri.app)
+[![Price](https://img.shields.io/badge/Price-%242.00-brightgreen)](https://store.steampowered.com/app/4631820/DualSlide/)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Windows' built-in wallpaper settings apply the same image to every monitor. DualSlide lets each display run its own slideshow — different folders, different schedules, fully independent.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Features
 
-## Expanding the ESLint configuration
+### Slideshow & Image Management
+- **Per-monitor independent slideshows** — assign different folders and image sources to each display
+- **Multi-source** — combine multiple folders and individual images into a single source pool per monitor
+- **Favorites** — mark images as favorites; they appear 3× more often in shuffle mode
+- **Pin** — lock the current image so the slideshow won't advance past it
+- **Supported formats**: JPG, JPEG, PNG, BMP, WEBP
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Automation & Scheduling
+- **Time-based schedule** — divide the day into up to 6 time slots and auto-switch image sources (e.g. landscapes in the morning, cityscapes at night)
+- **Auto-pause on fullscreen** — detects fullscreen apps and games, pauses automatically, resumes when you exit
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Display Control
+- **Monitor sync** — switch all monitors to the next/previous image simultaneously with one action
+- **Zen Mode** — one hotkey hides the taskbar and all desktop icons for a clean, distraction-free view
+- **Per-monitor taskbar** — independently show or hide the taskbar on each display
+- **Crossfade transitions** — smooth DWM crossfade between wallpapers; no hard cuts
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### System Integration
+- **Global hotkeys** — control previous / next / pause from any app in any context
+- **Profiles** — save your entire monitor configuration as a named profile and switch instantly
+- **System tray** — lives quietly in the background; always one click away
+- **Launch on startup** — auto-resumes your slideshow when Windows starts
+- **8 languages** — English, Korean, Japanese, Chinese, German, Spanish, French, Italian
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| App Framework | Tauri 2.0 |
+| Frontend | React 18 + TypeScript + Vite |
+| Backend | Rust + Tokio (async) |
+| Styling | Tailwind CSS + framer-motion |
+| Wallpaper Engine | more-wallpapers |
+| Settings | tauri-plugin-store (JSON) |
+| Global Hotkeys | tauri-plugin-global-shortcut |
+| Autostart | tauri-plugin-autostart |
+| i18n | i18next + react-i18next |
+| Image Validation | image crate |
+| Shuffle | rand crate |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) (stable toolchain)
+
+### Development
+
+```bash
+npm install
+npx tauri dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Build
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npx tauri build
 ```
+
+Output: `src-tauri/target/release/bundle/nsis/DualSlide_x.x.x_x64-setup.exe`
+
+---
+
+## System Requirements
+
+| | Minimum |
+|---|---|
+| OS | Windows 10 64-bit |
+| CPU | Intel Core i3 or equivalent |
+| RAM | 2 GB |
+
+---
+
+## Changelog
+
+| Date | Changes |
+|---|---|
+| 2026-06 | Steam release, icon refresh, drag-and-drop improvements |
+| 2026-04 | Time-based schedule + multi-source support |
+| 2026-03 | Favorites & Pin implemented |
+| 2026-03 | Zen Mode — hotkey for immersive wallpaper view |
+| 2026-03 | Monitor sync + per-monitor taskbar control |
+| 2026-03 | All features made free (Pro tier removed) |
+| 2026-03 | Initial release — multi-monitor slideshow engine |
+
+---
+
+## Links
+
+- [Steam Store](https://store.steampowered.com/app/4631820/DualSlide/)
+
+---
+
+Built with [Tauri](https://tauri.app) — not Electron, so it stays lightweight and out of your RAM.

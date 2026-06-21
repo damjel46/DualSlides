@@ -460,7 +460,7 @@ impl SlideshowEngine {
         let path = ms.images[idx].clone();
         drop(map); // release lock before I/O
 
-        monitor::set_wallpaper(monitor_id, &path)?;
+        crate::fade::fade_and_set(monitor_id, &path)?;
         emit_wallpaper_changed(&*self.app_handle.lock().unwrap());
         log::info!("[{}] next → index {}", monitor_id, idx);
         Ok(())
@@ -494,7 +494,7 @@ impl SlideshowEngine {
         let path = ms.images[ms.current_index].clone();
         drop(map);
 
-        monitor::set_wallpaper(monitor_id, &path)?;
+        crate::fade::fade_and_set(monitor_id, &path)?;
         emit_wallpaper_changed(&*self.app_handle.lock().unwrap());
         log::info!("[{}] prev (shuffle random)", monitor_id);
         Ok(())

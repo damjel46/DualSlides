@@ -18,7 +18,6 @@ import { useTheme } from "./hooks/useTheme";
 import { startSynced, getImagesFromFolder, toggleZenMode, isZenModeActive, togglePinAll, setSchedule, setFullscreenPauseEnabled, setTaskbarVisible, getTaskbarVisible } from "./lib/commands";
 import { load } from "@tauri-apps/plugin-store";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LAYOUT_SIZES } from "./lib/layout";
 import { ToastProvider, toast } from "./components/Toast";
 import type { Schedule } from "./lib/commands";
@@ -48,21 +47,8 @@ function App() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
   const [selectedMonitor, setSelectedMonitor] = useState<number | null>(null);
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [clearedMonitorIds, setClearedMonitorIds] = useState<Set<string>>(new Set());
 
-  // Detect OS file drag entering/leaving the app window via Tauri API
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    getCurrentWebview().onDragDropEvent((e) => {
-      if (e.payload.type === "enter" || e.payload.type === "over") {
-        setIsDraggingFile(true);
-      } else {
-        setIsDraggingFile(false);
-      }
-    }).then((fn) => { unlisten = fn; });
-    return () => { unlisten?.(); };
-  }, []);
 
   // Auto-select primary monitor on first load
   useEffect(() => {
@@ -1132,18 +1118,6 @@ function App() {
       <FaqModal open={faqOpen} onClose={() => setFaqOpen(false)} />
       <ToastProvider />
 
-      {/* Full-window file drag overlay */}
-      {isDraggingFile && (
-        <div className="fixed inset-0 z-[500] pointer-events-none flex flex-col items-center justify-center gap-4 bg-ds-accent/10 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-ds-accent/40 bg-ds-bg/80 px-10 py-8 shadow-2xl">
-            <svg className="h-12 w-12 text-ds-accent-light" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-            </svg>
-            <span className="text-base font-semibold text-ds-accent-light">{t("monitor.drop_images")}</span>
-            <span className="text-xs text-ds-text-muted">{t("monitor.drop_images_sub", { defaultValue: "Drop onto a monitor card" })}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

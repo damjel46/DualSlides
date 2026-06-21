@@ -27,7 +27,6 @@
     "deselect_all_tip": "Escludi tutte le immagini dalla presentazione",
     "delete_all": "Elimina tutto",
     "delete_all_tip": "Rimuovi tutte le sorgenti immagine",
-    "drop_images": "Trascina le immagini qui",
     "select_monitor": "Seleziona un monitor sopra per configurarlo"
   },
   "slideshow": {

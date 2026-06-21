@@ -27,7 +27,6 @@
     "deselect_all_tip": "Exclure toutes les images du diaporama",
     "delete_all": "Tout supprimer",
     "delete_all_tip": "Supprimer toutes les sources d'images",
-    "drop_images": "Déposez les images ici",
     "select_monitor": "Sélectionnez un moniteur ci-dessus pour le configurer"
   },
   "slideshow": {

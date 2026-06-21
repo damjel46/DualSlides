@@ -27,7 +27,6 @@
     "deselect_all_tip": "すべての画像をスライドショーから除外",
     "delete_all": "全て削除",
     "delete_all_tip": "すべての画像ソースを削除",
-    "drop_images": "ここに画像をドロップ",
     "select_monitor": "上のモニターを選択して設定"
   },
   "slideshow": {

@@ -344,7 +344,6 @@ export function MonitorCard({
   const [taskbarHidden, setTaskbarHidden] = useState(false);
   const [profileMenu, setProfileMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [profileEdit, setProfileEdit] = useState<{ id: string | null; name: string; thumbnail: string | null; isNew?: boolean } | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
 
   // Close profile context menu on click outside
   useEffect(() => {
@@ -524,38 +523,6 @@ export function MonitorCard({
     });
   };
 
-  const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "bmp", "webp"]);
-
-  // Handle file drop via Tauri API — check if drop position is within this card
-  const selectedFilesRef = useRef(selectedFiles);
-  const updateRef = useRef(update);
-  useEffect(() => { selectedFilesRef.current = selectedFiles; }, [selectedFiles]);
-  useEffect(() => { updateRef.current = update; }, [update]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => {
-      getCurrentWebview().onDragDropEvent((e) => {
-        if (e.payload.type !== "drop") return;
-        const { x, y } = e.payload.position;
-        const rect = cardRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
-
-        const imagePaths = e.payload.paths.filter((p) =>
-          IMAGE_EXTS.has(p.split(".").pop()?.toLowerCase() ?? "")
-        );
-        if (imagePaths.length === 0) return;
-        const existing = new Set(selectedFilesRef.current);
-        const newFiles = imagePaths.filter((p) => !existing.has(p));
-        if (newFiles.length > 0) {
-          updateRef.current({ selectedFiles: [...selectedFilesRef.current, ...newFiles] });
-        }
-      }).then((fn) => { unlisten = fn; });
-    });
-    return () => { unlisten?.(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleSelectFiles = async () => {
     const selected = await open({
@@ -629,7 +596,6 @@ export function MonitorCard({
 
   return (
     <div
-      ref={cardRef}
       className="rounded-2xl border border-ds-border bg-ds-card overflow-hidden"
     >
       <div className="p-5">
