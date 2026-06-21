@@ -10,7 +10,7 @@
 
 <br>
 
-## 📱 스크린샷
+## 📱 이미지
 
 ![logo](screenshots/logo.png)
 
