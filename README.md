@@ -12,11 +12,11 @@
 
 ## 📱 스크린샷
 
-| 대시보드 | 모니터 설정 | 스케줄 & 프로필 |
-|:---:|:---:|:---:|
-| ![대시보드](https://shared.akamai.steamstatic.com/community_assets/images/apps/4631820/a1ac9b9e9d41f46315ac0bf06bcbbabd9d4c654b.jpg) | ![모니터 설정](screenshots/monitor-settings.png) | ![스케줄](screenshots/schedule.png) |
+![logo](screenshots/logo.png)
 
-> 스크린샷은 실제 앱 화면으로 교체 예정
+| 대시보드 | 멀티모니터 환경 |
+|:---:|:---:|
+| ![대시보드](screenshots/dashboard.png) | ![mockup](screenshots/mockup.png) |
 
 <br>
 
